@@ -59,6 +59,11 @@ paths:
 device: "cuda"
 seed: 42
 
+# Weights & Biases
+wandb:
+  project: "nlp-transformer-mt"
+  entity: null
+
 # Version info
 version:
   name: "v1_baseline"

@@ -44,6 +44,7 @@ training:
   gradient_accumulation_steps: 2  # Effective batch size = 64
   max_grad_norm: 1.0
   
+  use_wandb: true
   save_every: 1000
   eval_every: 500
   log_every: 100
@@ -63,6 +64,11 @@ paths:
 
 device: "cuda"
 seed: 42
+
+# Weights & Biases
+wandb:
+  project: "nlp-transformer-mt"
+  entity: null
 
 # Version info
 version:

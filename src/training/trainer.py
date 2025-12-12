@@ -17,6 +17,14 @@ from .metrics import MetricsTracker, compute_token_accuracy
 
 logger = logging.getLogger(__name__)
 
+# Weights & Biases
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    logger.warning("wandb not available. Install with: pip install wandb")
+
 
 class Trainer:
     """
@@ -120,6 +128,29 @@ class Trainer:
         self.global_step = 0
         self.best_val_loss = float('inf')
         self.patience_counter = 0
+        
+        # Weights & Biases
+        self.use_wandb = train_config.get('use_wandb', False)
+        if self.use_wandb and WANDB_AVAILABLE:
+            # Initialize wandb
+            wandb_config = config.get('wandb', {})
+            project_name = wandb_config.get('project', 'transformer-mt')
+            run_name = config.get('version', {}).get('name', 'experiment')
+            
+            wandb.init(
+                project=project_name,
+                name=run_name,
+                config={
+                    'model': model_config,
+                    'training': train_config,
+                    'vocab': vocab_config
+                }
+            )
+            wandb.watch(self.model, log='all', log_freq=1000)
+            logger.info("Weights & Biases logging enabled")
+        elif self.use_wandb:
+            logger.warning("wandb requested but not available")
+            self.use_wandb = False
     
     def train_epoch(self, epoch: int):
         """
@@ -205,11 +236,29 @@ class Trainer:
                         'ppl': f'{train_ppl:.2f}',
                         'lr': f'{lr:.2e}'
                     })
+                    
+                    # Log to wandb
+                    if self.use_wandb:
+                        wandb.log({
+                            'train/loss': train_loss,
+                            'train/perplexity': train_ppl,
+                            'train/learning_rate': lr,
+                            'train/epoch': epoch,
+                            'train/step': self.global_step
+                        }, step=self.global_step)
                 
                 # Evaluation
                 if self.global_step % self.eval_every == 0:
                     val_loss = self.validate()
                     self.model.train()
+                    
+                    # Log validation to wandb
+                    if self.use_wandb:
+                        wandb.log({
+                            'val/loss': val_loss,
+                            'val/perplexity': torch.exp(torch.tensor(val_loss)).item(),
+                            'val/best_loss': self.best_val_loss
+                        }, step=self.global_step)
                     
                     # Check for improvement
                     if val_loss < self.best_val_loss:

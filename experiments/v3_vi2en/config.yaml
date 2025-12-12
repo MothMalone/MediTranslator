@@ -48,6 +48,7 @@ training:
   
   # Mixed precision training (if available)
   use_amp: true
+  use_wandb: true
   
   save_every: 5000  # Save less frequently to save disk space
   eval_every: 1000

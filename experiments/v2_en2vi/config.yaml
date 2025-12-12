@@ -47,6 +47,8 @@ training:
   save_every: 1000
   eval_every: 500
   log_every: 100
+
+  use_wandb: true
   early_stopping_patience: 5
 
 # Inference
