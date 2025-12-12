@@ -104,6 +104,7 @@ class TensorBoardLogger:
 
 
 if __name__ == "__main__":
+    # Test logger setup
     logger = setup_logger("test", log_file="/tmp/test.log")
     logger.info("Test message")
     logger.warning("Test warning")

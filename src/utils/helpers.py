@@ -10,6 +10,12 @@ from typing import Optional
 
 
 def set_seed(seed: int = 42):
+    """
+    Set random seed for reproducibility.
+    
+    Args:
+        seed: Random seed value
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -22,12 +28,31 @@ def set_seed(seed: int = 42):
 
 
 def get_device(device: Optional[str] = None) -> torch.device:
+    """
+    Get the device to use for computation.
+    
+    Args:
+        device: Device string ('cuda', 'cpu', or None for auto)
+        
+    Returns:
+        torch.device instance
+    """
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
     return torch.device(device)
 
 
 def count_parameters(model: nn.Module, trainable_only: bool = True) -> int:
+    """
+    Count the number of parameters in a model.
+    
+    Args:
+        model: PyTorch model
+        trainable_only: Whether to count only trainable parameters
+        
+    Returns:
+        Number of parameters
+    """
     if trainable_only:
         return sum(p.numel() for p in model.parameters() if p.requires_grad)
     return sum(p.numel() for p in model.parameters())
@@ -53,6 +78,15 @@ def format_number(n: int) -> str:
 
 
 def get_model_summary(model: nn.Module) -> str:
+    """
+    Get a summary of the model architecture.
+    
+    Args:
+        model: PyTorch model
+        
+    Returns:
+        Model summary string
+    """
     total_params = count_parameters(model, trainable_only=False)
     trainable_params = count_parameters(model, trainable_only=True)
     

@@ -20,11 +20,11 @@ class ScaledDotProductAttention(nn.Module):
     Args:
         dropout: Dropout probability for attention weights
     """
-
-    def __init__(self, dropout: float = 0.1):
+    
+    def __init__(self, dropout: float = 0.0):
         super().__init__()
-        self.dropout == nn.Dropout(dropout)
-
+        self.dropout = nn.Dropout(dropout)
+    
     def forward(
         self,
         query: torch.Tensor,
@@ -46,34 +46,36 @@ class ScaledDotProductAttention(nn.Module):
             output: Attention output (batch, heads, seq_len, d_v)
             attention_weights: Attention weights (batch, heads, seq_len, seq_len)
         """
-
         d_k = query.size(-1)
-
+        
+        # Step 1: Compute attention scores
         # scores = Q @ K^T / sqrt(d_k)
         # Shape: (batch, heads, seq_len_q, seq_len_k)
         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
-
-        # Apply mask (if provided)
+        
+        # Step 2: Apply mask (if provided)
         if mask is not None:
+            # Replace masked positions with large negative value
             scores = scores.masked_fill(mask, float('-inf'))
-
-        # Apply softmax to get attention weights
+        
+        # Step 3: Apply softmax to get attention weights
         attention_weights = F.softmax(scores, dim=-1)
-
-        # Case where all values are masked
+        
+        # Handle case where all values are masked
         attention_weights = attention_weights.masked_fill(
             torch.isnan(attention_weights), 0.0
         )
-
-        # Apply dropout 
+        
+        # Step 4: Apply dropout
         attention_weights = self.dropout(attention_weights)
-
-        # Compute output as weighted sum of values
-        # output = attention_weights @ value
+        
+        # Step 5: Compute output as weighted sum of values
+        # output = attention_weights @ V
         output = torch.matmul(attention_weights, value)
-
+        
         return output, attention_weights
-    
+
+
 class MultiHeadAttention(nn.Module):
     """
     Multi-Head Attention
@@ -86,7 +88,7 @@ class MultiHeadAttention(nn.Module):
         n_heads: Number of attention heads
         dropout: Dropout probability
     """
-
+    
     def __init__(
         self,
         d_model: int,
@@ -115,14 +117,14 @@ class MultiHeadAttention(nn.Module):
         
         # Initialize weights
         self._reset_parameters()
-
+    
     def _reset_parameters(self):
         """Initialize parameters using Xavier uniform."""
         nn.init.xavier_uniform_(self.W_Q.weight)
         nn.init.xavier_uniform_(self.W_K.weight)
         nn.init.xavier_uniform_(self.W_V.weight)
         nn.init.xavier_uniform_(self.W_O.weight)
-
+    
     def forward(
         self,
         query: torch.Tensor,
@@ -144,31 +146,32 @@ class MultiHeadAttention(nn.Module):
             attention_weights: Attention weights (batch, n_heads, seq_len_q, seq_len_k)
         """
         batch_size = query.size(0)
-
-        # Linear projections
+        
+        # Step 1: Linear projections
         # Shape: (batch, seq_len, d_model) -> (batch, seq_len, d_model)
         Q = self.W_Q(query)
         K = self.W_K(key)
         V = self.W_V(value)
-
-        # Reshape to (batch, n_heads, seq_len, d_k)
+        
+        # Step 2: Reshape to (batch, n_heads, seq_len, d_k)
         Q = Q.view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
         K = K.view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
         V = V.view(batch_size, -1, self.n_heads, self.d_v).transpose(1, 2)
         
-        # Apply scaled dot-product attention
+        # Step 3: Apply scaled dot-product attention
         attn_output, attention_weights = self.attention(Q, K, V, mask)
-
-        # Concatenate heads
+        
+        # Step 4: Concatenate heads
         # (batch, n_heads, seq_len, d_v) -> (batch, seq_len, d_model)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(batch_size, -1, self.d_model)
         
-        # Final linear projection
+        # Step 5: Final linear projection
         output = self.W_O(attn_output)
         
         return output, attention_weights
-    
+
+
 if __name__ == "__main__":
     # Test the attention modules
     batch_size = 2

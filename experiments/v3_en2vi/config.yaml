@@ -1,0 +1,82 @@
+# Version 3: En→Vi Optimized Transformer
+# Larger model with advanced techniques
+
+# Data Configuration
+data:
+  src_lang: "en"
+  tgt_lang: "vi"
+  train_src: "data/raw/train.en.txt"
+  train_tgt: "data/raw/train.vi.txt"
+  # Validation files (if not exist, will auto-split from training)
+  val_src: "data/raw/val.en.txt"
+  val_tgt: "data/raw/val.vi.txt"
+  val_split: 0.1  # 10% of training data for validation if val files don't exist
+  test_src: "data/raw/public_test.en.txt"
+  test_tgt: "data/raw/public_test.vi.txt"
+  max_seq_length: 256  # Increased
+
+# Vocabulary - BPE tokenization
+vocab:
+  src_vocab_size: 50000  # Larger vocabulary
+  tgt_vocab_size: 50000
+  min_freq: 1
+  tokenization: "bpe"  # Use BPE instead of word-level
+
+# Model - Larger (Transformer Big config)
+model:
+  d_model: 1024  # Increased
+  n_heads: 16    # Increased
+  n_encoder_layers: 6
+  n_decoder_layers: 6
+  d_ff: 4096     # Increased
+  dropout: 0.3   # Higher dropout for regularization
+  max_seq_length: 512
+
+# Training - Advanced
+training:
+  batch_size: 8  # Smaller due to larger model
+  epochs: 100
+  optimizer: "adamw"
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+  scheduler: "cosine"  # Cosine annealing
+  warmup_steps: 8000   # Longer warmup
+  label_smoothing: 0.1
+  gradient_accumulation_steps: 8  # Effective batch size = 64
+  max_grad_norm: 1.0
+  
+  # Mixed precision training (if available)
+  use_amp: true
+  
+  save_every: 5000  # Save less frequently to save disk space
+  eval_every: 1000
+  log_every: 100
+  early_stopping_patience: 10
+
+# Inference
+inference:
+  beam_size: 10  # Larger beam
+  max_decode_length: 256
+  length_penalty: 0.8
+
+# Paths
+paths:
+  checkpoint_dir: "experiments/v3_en2vi/checkpoints"
+  log_dir: "experiments/v3_en2vi/logs"
+  vocab_dir: "data/vocab_en2vi"
+
+device: "cuda"
+seed: 42
+
+# Version info
+version:
+  name: "v3_en2vi"
+  description: "En→Vi optimized large model with advanced techniques"
+  improvements:
+    - "Larger model (1024-dim, 16 heads)"
+    - "BPE tokenization"
+    - "Cosine learning rate schedule"
+    - "Mixed precision training"
+    - "Larger beam search (10)"
+    - "Longer sequences (256)"

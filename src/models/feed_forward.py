@@ -24,7 +24,7 @@ class FeedForwardNetwork(nn.Module):
         dropout: Dropout probability
         activation: Activation function ('relu' or 'gelu')
     """
-
+    
     def __init__(
         self,
         d_model: int,
@@ -84,6 +84,7 @@ class FeedForwardNetwork(nn.Module):
         x = self.dropout(x)
         
         return x
+
 
 class GatedFeedForward(nn.Module):
     """

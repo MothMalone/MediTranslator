@@ -25,8 +25,10 @@ class MetricsTracker:
     
     def __init__(self):
         self.reset()
-
+    
     def reset(self):
+        """Reset all metrics."""
+        self.train_losses = []
         self.val_losses = []
         self.train_perplexities = []
         self.val_perplexities = []
@@ -38,7 +40,7 @@ class MetricsTracker:
         self._running_loss = 0.0
         self._running_tokens = 0
         self._running_steps = 0
-
+    
     def update(
         self,
         loss: float,
@@ -56,10 +58,10 @@ class MetricsTracker:
         self._running_loss += loss * n_tokens
         self._running_tokens += n_tokens
         self._running_steps += 1
-
+        
         if learning_rate is not None:
             self.learning_rates.append(learning_rate)
-
+    
     def get_average_loss(self) -> float:
         """Get average loss over accumulated batches."""
         if self._running_tokens == 0:

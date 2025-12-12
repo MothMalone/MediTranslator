@@ -1,10 +1,136 @@
 """
 Optimizer and Learning Rate Scheduler
+Implements Adam/AdamW optimizers and Warmup learning rate scheduler.
 """
 import torch
 import torch.optim as optim
 import math
 from typing import Optional
+
+
+class WarmupScheduler:
+    """
+    Learning Rate Scheduler with Warmup
+    
+    Implements the learning rate schedule from "Attention Is All You Need":
+    lrate = d_model^(-0.5) * min(step^(-0.5), step * warmup_steps^(-1.5))
+    
+    Args:
+        optimizer: PyTorch optimizer
+        d_model: Model dimension
+        warmup_steps: Number of warmup steps
+        factor: Scaling factor for learning rate
+    """
+    
+    def __init__(
+        self,
+        optimizer: optim.Optimizer,
+        d_model: int,
+        warmup_steps: int = 4000,
+        factor: float = 1.0
+    ):
+        self.optimizer = optimizer
+        self.d_model = d_model
+        self.warmup_steps = warmup_steps
+        self.factor = factor
+        self._step = 0
+        self._rate = 0
+    
+    def step(self):
+        """Update learning rate and step."""
+        self._step += 1
+        rate = self._get_rate()
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = rate
+        self._rate = rate
+    
+    def _get_rate(self) -> float:
+        """Compute learning rate for current step."""
+        step = self._step
+        return self.factor * (
+            self.d_model ** (-0.5) *
+            min(step ** (-0.5), step * self.warmup_steps ** (-1.5))
+        )
+    
+    def get_lr(self) -> float:
+        """Get current learning rate."""
+        return self._rate
+    
+    def state_dict(self) -> dict:
+        """Return scheduler state."""
+        return {
+            'step': self._step,
+            'rate': self._rate
+        }
+    
+    def load_state_dict(self, state_dict: dict):
+        """Load scheduler state."""
+        self._step = state_dict['step']
+        self._rate = state_dict['rate']
+
+
+class CosineWarmupScheduler:
+    """
+    Cosine Annealing with Warmup
+    
+    Linear warmup followed by cosine decay.
+    
+    Args:
+        optimizer: PyTorch optimizer
+        warmup_steps: Number of warmup steps
+        total_steps: Total number of training steps
+        min_lr: Minimum learning rate
+    """
+    
+    def __init__(
+        self,
+        optimizer: optim.Optimizer,
+        warmup_steps: int,
+        total_steps: int,
+        min_lr: float = 0.0
+    ):
+        self.optimizer = optimizer
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
+        self.min_lr = min_lr
+        self.base_lr = optimizer.param_groups[0]['lr']
+        self._step = 0
+        self._rate = 0
+    
+    def step(self):
+        """Update learning rate and step."""
+        self._step += 1
+        rate = self._get_rate()
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = rate
+        self._rate = rate
+    
+    def _get_rate(self) -> float:
+        """Compute learning rate for current step."""
+        if self._step < self.warmup_steps:
+            # Linear warmup
+            return self.base_lr * self._step / self.warmup_steps
+        else:
+            # Cosine decay
+            progress = (self._step - self.warmup_steps) / (self.total_steps - self.warmup_steps)
+            return self.min_lr + 0.5 * (self.base_lr - self.min_lr) * (1 + math.cos(math.pi * progress))
+    
+    def get_lr(self) -> float:
+        """Get current learning rate."""
+        return self._rate
+    
+    def state_dict(self) -> dict:
+        """Return scheduler state."""
+        return {
+            'step': self._step,
+            'rate': self._rate
+        }
+    
+    def load_state_dict(self, state_dict: dict):
+        """Load scheduler state."""
+        self._step = state_dict['step']
+        self._rate = state_dict['rate']
+
 
 def get_optimizer(
     model: torch.nn.Module,
