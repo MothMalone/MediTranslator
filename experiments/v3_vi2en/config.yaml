@@ -5,14 +5,14 @@
 data:
   src_lang: "vi"
   tgt_lang: "en"
-  train_src: "data/raw/train.vi.txt"
-  train_tgt: "data/raw/train.en.txt"
+  train_src: "data/raw_opus100/train.vi.txt"
+  train_tgt: "data/raw_opus100/train.en.txt"
   # Validation files (if not exist, will auto-split from training)
-  val_src: "data/raw/val.vi.txt"
-  val_tgt: "data/raw/val.en.txt"
+  val_src: "data/raw_opus100/val.vi.txt"
+  val_tgt: "data/raw_opus100/val.en.txt"
   val_split: 0.1  # 10% of training data for validation if val files don't exist
-  test_src: "data/raw/public_test.vi.txt"
-  test_tgt: "data/raw/public_test.en.txt"
+  test_src: "data/raw_opus100/public_test.vi.txt"
+  test_tgt: "data/raw_opus100/public_test.en.txt"
   max_seq_length: 256  # Increased
 
 # Vocabulary - BPE tokenization
@@ -35,7 +35,7 @@ model:
 # Training - Advanced
 training:
   batch_size: 8  # Smaller due to larger model
-  epochs: 100
+  epochs: 5  # Good balance of quality and time
   optimizer: "adamw"
   learning_rate: 0.0001
   weight_decay: 0.01
@@ -48,7 +48,7 @@ training:
   
   # Mixed precision training (if available)
   use_amp: true
-  use_wandb: true
+  use_wandb: true  # Enable Weights & Biases logging
   
   save_every: 5000  # Save less frequently to save disk space
   eval_every: 1000
@@ -65,10 +65,15 @@ inference:
 paths:
   checkpoint_dir: "experiments/v3_vi2en/checkpoints"
   log_dir: "experiments/v3_vi2en/logs"
-  vocab_dir: "data/vocab_vi2en"
+  vocab_dir: "data/vocab_v3_vi2en"
 
 device: "cuda"
 seed: 42
+
+# Weights & Biases
+wandb:
+  project: "nlp-transformer-mt"
+  entity: null  # Your wandb username (optional)
 
 # Version info
 version:

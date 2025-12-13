@@ -1,24 +1,24 @@
-# Version 1: Baseline Transformer
+# Version 1: Baseline Transformer En→Vi
 # Standard configuration without optimizations
 
 # Data Configuration
 data:
-  src_lang: "vi"
-  tgt_lang: "en"
-  train_src: "data/raw/train.vi.txt"
-  train_tgt: "data/raw/train.en.txt"
+  src_lang: "en"
+  tgt_lang: "vi"
+  train_src: "data/raw_opus100/train.en.txt"
+  train_tgt: "data/raw_opus100/train.vi.txt"
   # Validation files (if not exist, will auto-split from training)
-  val_src: "data/raw/val.vi.txt"
-  val_tgt: "data/raw/val.en.txt"
+  val_src: "data/raw_opus100/val.en.txt"
+  val_tgt: "data/raw_opus100/val.vi.txt"
   val_split: 0.1  # 10% of training data for validation if val files don't exist
-  test_src: "data/raw/public_test.vi.txt"
-  test_tgt: "data/raw/public_test.en.txt"
+  test_src: "data/raw_opus100/public_test.en.txt"
+  test_tgt: "data/raw_opus100/public_test.vi.txt"
   max_seq_length: 128
 
 # Vocabulary
 vocab:
-  src_vocab_size: 32000
-  tgt_vocab_size: 32000
+  src_vocab_size: 40000  # Increased for better Vietnamese coverage
+  tgt_vocab_size: 40000
   min_freq: 2
 
 # Model - Standard Transformer Base
@@ -34,13 +34,14 @@ model:
 # Training - Basic setup
 training:
   batch_size: 32
-  epochs: 50
+  epochs: 5  # Reasonable training time
   optimizer: "adam"
   learning_rate: 0.0001
   scheduler: "warmup"
   warmup_steps: 4000
   label_smoothing: 0.0  # No label smoothing
   
+  use_wandb: true
   save_every: 1000
   eval_every: 500
   log_every: 100
@@ -52,9 +53,9 @@ inference:
 
 # Paths
 paths:
-  checkpoint_dir: "experiments/v1_baseline/checkpoints"
-  log_dir: "experiments/v1_baseline/logs"
-  vocab_dir: "data/vocab"
+  checkpoint_dir: "experiments/v1_en2vi/checkpoints"
+  log_dir: "experiments/v1_en2vi/logs"
+  vocab_dir: "data/vocab_v1_en2vi"
 
 device: "cuda"
 seed: 42
@@ -66,6 +67,6 @@ wandb:
 
 # Version info
 version:
-  name: "v1_baseline"
-  description: "Baseline Transformer with standard configuration"
+  name: "v1_en2vi"
+  description: "Baseline Transformer En→Vi with standard configuration"
   notes: "No optimizations - serves as baseline for comparison"
