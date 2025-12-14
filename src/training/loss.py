@@ -78,8 +78,8 @@ class LabelSmoothingLoss(nn.Module):
         smooth_loss = -log_probs.sum(dim=-1)  # Sum over vocab
         smooth_loss = smooth_loss + log_probs[:, self.padding_idx]  # Exclude padding
         
-        # Combined loss
-        loss = -self.confidence * true_log_probs - (self.smoothing / (self.vocab_size - 1)) * smooth_loss
+        # Combined loss (note: positive sign because log_probs are already negative)
+        loss = -self.confidence * true_log_probs + (self.smoothing / (self.vocab_size - 1)) * smooth_loss
         
         # Mask padding and average
         loss = (loss * mask).sum() / n_tokens
