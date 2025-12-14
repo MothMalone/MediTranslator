@@ -264,7 +264,7 @@ class Trainer:
                     if val_loss < self.best_val_loss:
                         self.best_val_loss = val_loss
                         self.patience_counter = 0
-                        self.save_checkpoint('best_model.pt')
+                        #self.save_checkpoint('best_model.pt')
                     else:
                         self.patience_counter += 1
                 
