@@ -10,7 +10,7 @@ data:
   # Validation files (if not exist, will auto-split from training)
   val_src: "data/raw/val.vi.txt"
   val_tgt: "data/raw/val.en.txt"
-  val_split: 0.1  # 10% of training data for validation if val files don't exist
+  val_split: 0.1 # 10% of training data for validation if val files don't exist
   test_src: "data/raw/public_test.vi.txt"
   test_tgt: "data/raw/public_test.en.txt"
   max_seq_length: 128
@@ -35,24 +35,24 @@ model:
 training:
   batch_size: 32
   epochs: 50
-  optimizer: "adamw"  # Changed to AdamW
+  optimizer: "adamw" # Changed to AdamW
   learning_rate: 0.0001
-  weight_decay: 0.01  # Added weight decay
+  weight_decay: 0.01 # Added weight decay
   scheduler: "warmup"
   warmup_steps: 4000
-  label_smoothing: 0.1  # Added label smoothing
-  gradient_accumulation_steps: 2  # Effective batch size = 64
+  label_smoothing: 0.1 # Added label smoothing
+  gradient_accumulation_steps: 2 # Effective batch size = 64
   max_grad_norm: 1.0
-  
+
   use_wandb: true
-  save_every: 1000
+  save_every: 20000
   eval_every: 500
   log_every: 100
   early_stopping_patience: 5
 
 # Inference
 inference:
-  beam_size: 5  # Beam search
+  beam_size: 5 # Beam search
   max_decode_length: 128
   length_penalty: 0.6
 

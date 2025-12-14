@@ -10,14 +10,14 @@ data:
   # Validation files (if not exist, will auto-split from training)
   val_src: "data/raw_opus100/val.en.txt"
   val_tgt: "data/raw_opus100/val.vi.txt"
-  val_split: 0.1  # 10% of training data for validation if val files don't exist
+  val_split: 0.1 # 10% of training data for validation if val files don't exist
   test_src: "data/raw_opus100/public_test.en.txt"
   test_tgt: "data/raw_opus100/public_test.vi.txt"
   max_seq_length: 128
 
 # Vocabulary
 vocab:
-  src_vocab_size: 40000  # Increased for better Vietnamese coverage
+  src_vocab_size: 40000 # Increased for better Vietnamese coverage
   tgt_vocab_size: 40000
   min_freq: 2
 
@@ -34,21 +34,21 @@ model:
 # Training - Basic setup
 training:
   batch_size: 32
-  epochs: 5  # Reasonable training time
+  epochs: 5 # Reasonable training time
   optimizer: "adam"
   learning_rate: 0.0001
   scheduler: "warmup"
   warmup_steps: 4000
-  label_smoothing: 0.0  # No label smoothing
-  
+  label_smoothing: 0.0 # No label smoothing
+
   use_wandb: true
-  save_every: 1000
+  save_every: 20000
   eval_every: 500
   log_every: 100
 
 # Inference
 inference:
-  beam_size: 1  # Greedy search only
+  beam_size: 1 # Greedy search only
   max_decode_length: 128
 
 # Paths

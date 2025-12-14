@@ -10,54 +10,54 @@ data:
   # Validation files (if not exist, will auto-split from training)
   val_src: "data/raw_opus100/val.vi.txt"
   val_tgt: "data/raw_opus100/val.en.txt"
-  val_split: 0.1  # 10% of training data for validation if val files don't exist
+  val_split: 0.1 # 10% of training data for validation if val files don't exist
   test_src: "data/raw_opus100/public_test.vi.txt"
   test_tgt: "data/raw_opus100/public_test.en.txt"
-  max_seq_length: 256  # Increased
+  max_seq_length: 256 # Increased
 
 # Vocabulary - BPE tokenization
 vocab:
-  src_vocab_size: 50000  # Larger vocabulary
+  src_vocab_size: 50000 # Larger vocabulary
   tgt_vocab_size: 50000
   min_freq: 1
-  tokenization: "bpe"  # Use BPE instead of word-level
+  tokenization: "bpe" # Use BPE instead of word-level
 
 # Model - Larger (Transformer Big config)
 model:
-  d_model: 1024  # Increased
-  n_heads: 16    # Increased
+  d_model: 1024 # Increased
+  n_heads: 16 # Increased
   n_encoder_layers: 6
   n_decoder_layers: 6
-  d_ff: 4096     # Increased
-  dropout: 0.3   # Higher dropout for regularization
+  d_ff: 4096 # Increased
+  dropout: 0.3 # Higher dropout for regularization
   max_seq_length: 512
 
 # Training - Advanced
 training:
-  batch_size: 8  # Smaller due to larger model
-  epochs: 5  # Good balance of quality and time
+  batch_size: 8 # Smaller due to larger model
+  epochs: 5 # Good balance of quality and time
   optimizer: "adamw"
   learning_rate: 0.0001
   weight_decay: 0.01
   betas: [0.9, 0.98]
-  scheduler: "cosine"  # Cosine annealing
-  warmup_steps: 8000   # Longer warmup
+  scheduler: "cosine" # Cosine annealing
+  warmup_steps: 8000 # Longer warmup
   label_smoothing: 0.1
-  gradient_accumulation_steps: 8  # Effective batch size = 64
+  gradient_accumulation_steps: 8 # Effective batch size = 64
   max_grad_norm: 1.0
-  
+
   # Mixed precision training (if available)
   use_amp: true
-  use_wandb: true  # Enable Weights & Biases logging
-  
-  save_every: 5000  # Save less frequently to save disk space
+  use_wandb: true # Enable Weights & Biases logging
+
+  save_every: 20000 # Save less frequently to save disk space
   eval_every: 1000
   log_every: 100
   early_stopping_patience: 10
 
 # Inference
 inference:
-  beam_size: 10  # Larger beam
+  beam_size: 10 # Larger beam
   max_decode_length: 256
   length_penalty: 0.8
 
@@ -73,7 +73,7 @@ seed: 42
 # Weights & Biases
 wandb:
   project: "nlp-transformer-mt"
-  entity: null  # Your wandb username (optional)
+  entity: null # Your wandb username (optional)
 
 # Version info
 version:
