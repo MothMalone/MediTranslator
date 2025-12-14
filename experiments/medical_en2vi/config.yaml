@@ -1,0 +1,136 @@
+# Medical Domain Fine-tuning: English → Vietnamese
+# Tier 1 + Tier 2 Optimizations
+# Based on v2_en2vi with 500K medical parallel sentences
+
+# Data Configuration
+data:
+  src_lang: "en"
+  tgt_lang: "vi"
+  train_src: "../MedicalDataset_VLSP/train.en.txt"
+  train_tgt: "../MedicalDataset_VLSP/train.vi.txt"
+  val_split: 0.05  # 5% validation (25K samples)
+  test_src: "../MedicalDataset_VLSP/public_test.en.txt"
+  test_tgt: "../MedicalDataset_VLSP/public_test.vi.txt"
+  max_seq_length: 256  # Medical texts are longer
+
+# Vocabulary - Use pretrained v2 vocab
+vocab:
+  src_vocab_size: 40000
+  tgt_vocab_size: 40000
+  min_freq: 2
+
+# Model Architecture (same as v2)
+model:
+  d_model: 512
+  n_heads: 8
+  n_encoder_layers: 6
+  n_decoder_layers: 6
+  d_ff: 2048
+  dropout: 0.1
+  max_seq_length: 512
+
+# LoRA Configuration (Tier 1)
+lora:
+  enabled: true
+  rank: 16  # Higher rank for medical terminology
+  alpha: 32  # 2x rank
+  dropout: 0.05
+  # Target all attention + feedforward for maximum adaptation
+  target_modules:
+    - "query"
+    - "key"
+    - "value"
+    - "output"
+    - "fc1"  # First feedforward layer
+    - "fc2"  # Second feedforward layer
+
+# Fine-tuning Configuration
+training:
+  # Load pretrained checkpoint (NOTE: Update this path to your en2vi model)
+  resume_from: "experiments/v2_en2vi/checkpoints/best_model.pt"
+  freeze_pretrained: false  # LoRA handles freezing
+  
+  # Training Parameters (Tier 1)
+  batch_size: 16
+  epochs: 25
+  gradient_accumulation_steps: 4  # Effective batch = 64
+  max_grad_norm: 1.0
+  
+  # Optimizer (Tier 1)
+  optimizer: "adamw"
+  learning_rate: 0.00005  # 5e-5 for fine-tuning
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  
+  # Discriminative Learning Rates (Tier 2)
+  use_discriminative_lr: true
+  discriminative_lr_groups:
+    embeddings: 0.5  # 2.5e-5
+    encoder: 0.7     # 3.5e-5
+    decoder: 1.0     # 5e-5
+  
+  # Scheduler (Tier 1 - Cosine Annealing)
+  scheduler: "cosine_warmup"
+  warmup_steps: 1000
+  min_lr: 1.0e-6  # For cosine annealing
+  
+  # Label Smoothing
+  label_smoothing: 0.1
+  
+  # Stochastic Weight Averaging (Tier 2)
+  use_swa: true
+  swa_start_epoch: 20  # Start averaging at epoch 20
+  swa_lr: 0.00002
+  
+  # Checkpointing and Evaluation
+  save_every: 500
+  eval_every: 250
+  log_every: 50
+  early_stopping_patience: 8
+  
+  # Weights & Biases
+  use_wandb: true
+
+# Inference
+inference:
+  beam_size: 5
+  max_decode_length: 256
+  length_penalty: 0.6
+
+# Paths
+paths:
+  checkpoint_dir: "experiments/medical_en2vi/checkpoints"
+  log_dir: "experiments/medical_en2vi/logs"
+  vocab_dir: "data/vocab_v2_en2vi"  # Use v2 vocabulary (NOTE: Update if different)
+  swa_checkpoint: "experiments/medical_en2vi/checkpoints/swa_model.pt"
+
+# Device
+device: "cuda"
+seed: 42
+
+# Weights & Biases
+wandb:
+  project: "nlp-medical-mt"
+  entity: null
+  name: "medical_en2vi_lora_r16"
+  tags:
+    - "medical"
+    - "en2vi"
+    - "lora"
+    - "tier1+2"
+
+# Version Info
+version:
+  name: "medical_en2vi_lora"
+  description: "Medical domain En→Vi with LoRA + advanced techniques"
+  base_model: "v2_en2vi"
+  dataset: "VLSP Medical 500K"
+  improvements:
+    - "LoRA rank-16 (all attention + FFN)"
+    - "Discriminative learning rates"
+    - "Cosine annealing with warmup"
+    - "Stochastic Weight Averaging (SWA)"
+    - "Medical-optimized sequence length (256)"
+    - "5e-5 learning rate for stability"
+    - "25 epochs with early stopping"
