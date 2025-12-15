@@ -126,6 +126,30 @@ class LinearWithLoRA(nn.Module):
             Output tensor
         """
         return self.linear(x) + self.lora(x)
+    
+    def merge_weights(self):
+        """Merge LoRA weights into the base linear layer."""
+        if hasattr(self, '_merged') and self._merged:
+            return  # Already merged
+        
+        # Compute the LoRA weight update: scaling * B @ A
+        lora_weight = (self.lora.lora_B @ self.lora.lora_A) * self.lora.scaling
+        
+        # Add to base weight
+        self.linear.weight.data += lora_weight
+        self._merged = True
+    
+    def unmerge_weights(self):
+        """Unmerge LoRA weights from the base linear layer."""
+        if not hasattr(self, '_merged') or not self._merged:
+            return  # Not merged
+        
+        # Compute the LoRA weight update: scaling * B @ A
+        lora_weight = (self.lora.lora_B @ self.lora.lora_A) * self.lora.scaling
+        
+        # Subtract from base weight
+        self.linear.weight.data -= lora_weight
+        self._merged = False
 
 
 def apply_lora_to_model(
