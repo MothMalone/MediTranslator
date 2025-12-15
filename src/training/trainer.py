@@ -129,6 +129,10 @@ class Trainer:
         self.best_val_loss = float('inf')
         self.patience_counter = 0
         
+        # Checkpoint management
+        self.keep_last_n_checkpoints = train_config.get('keep_last_n_checkpoints', 2)
+        self.epoch_checkpoints = []  # Track epoch checkpoint files
+        
         # Weights & Biases
         self.use_wandb = train_config.get('use_wandb', False)
         if self.use_wandb and WANDB_AVAILABLE:
@@ -264,7 +268,7 @@ class Trainer:
                     if val_loss < self.best_val_loss:
                         self.best_val_loss = val_loss
                         self.patience_counter = 0
-                        #self.save_checkpoint('best_model.pt')
+                        self.save_checkpoint('best_model.pt')
                     else:
                         self.patience_counter += 1
                 
@@ -351,9 +355,27 @@ class Trainer:
         # Save final metrics
         self.metrics.save(os.path.join(self.log_dir, 'metrics.json'))
     
+    def cleanup_old_checkpoints(self):
+        """Remove old epoch checkpoints, keeping only the last N."""
+        while len(self.epoch_checkpoints) > self.keep_last_n_checkpoints:
+            old_checkpoint = self.epoch_checkpoints.pop(0)
+            try:
+                if os.path.exists(old_checkpoint):
+                    os.remove(old_checkpoint)
+                    logger.info(f"Removed old checkpoint: {old_checkpoint}")
+            except Exception as e:
+                logger.warning(f"Failed to remove {old_checkpoint}: {e}")
+    
     def save_checkpoint(self, filename: str):
         """Save model checkpoint."""
         filepath = os.path.join(self.checkpoint_dir, filename)
+        
+        # Track epoch checkpoints (not best_model.pt or step checkpoints)
+        is_epoch_checkpoint = filename.startswith('checkpoint_epoch_')
+        
+        # Cleanup old checkpoints before saving new one to ensure space
+        if is_epoch_checkpoint:
+            self.cleanup_old_checkpoints()
         
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
@@ -364,8 +386,16 @@ class Trainer:
             'config': self.config
         }
         
-        torch.save(checkpoint, filepath)
-        logger.info(f"Saved checkpoint to {filepath}")
+        try:
+            torch.save(checkpoint, filepath)
+            logger.info(f"Saved checkpoint to {filepath}")
+            
+            # Add to tracking list
+            if is_epoch_checkpoint:
+                self.epoch_checkpoints.append(filepath)
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint {filepath}: {e}")
+            raise
     
     def load_checkpoint(self, filepath: str):
         """Load model checkpoint."""
