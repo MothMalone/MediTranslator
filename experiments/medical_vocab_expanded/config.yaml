@@ -1,0 +1,78 @@
+# Medical Fine-tuning with Vocabulary Expansion
+# Strategy: Expand vocab to include medical terms, then fine-tune
+
+# Data Configuration
+data:
+  src_lang: "vi"
+  tgt_lang: "en"
+  train_src: "../MedicalDataset_VLSP/train.vi.txt"
+  train_tgt: "../MedicalDataset_VLSP/train.en.txt"
+  val_split: 0.05
+  max_seq_length: 256
+
+# Base Model to Fine-tune From
+base_model:
+  checkpoint: "experiments/v2_vi2en/checkpoints/best_model.pt"
+  vocab_dir: "data/vocab_v2_vi2en"
+
+# Vocabulary Expansion
+vocab_expansion:
+  enabled: true
+  max_new_words_src: 10000  # Add top 3000 medical terms
+  max_new_words_tgt: 10000
+  min_freq: 2  # Only add terms appearing 3+ times
+
+# Model Architecture (inherited from v2)
+model:
+  d_model: 512
+  n_heads: 8
+  n_encoder_layers: 6
+  n_decoder_layers: 6
+  d_ff: 2048
+  dropout: 0.1
+  max_seq_length: 512
+
+# Fine-tuning Configuration
+training:
+  batch_size: 16
+  epochs: 10
+  max_grad_norm: 1.0
+  
+  # Differential learning rates
+  base_learning_rate: 0.000005  # 5e-6 for pretrained weights
+  new_embedding_lr: 0.0001      # 1e-4 for new embeddings
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  
+  label_smoothing: 0.1
+  
+  eval_every: 500
+  log_every: 100
+  save_every: 10000  # Save checkpoint every 1000 steps for resuming
+  early_stopping_patience: 5
+
+# Paths
+paths:
+  checkpoint_dir: "experiments/medical_vocab_expand/checkpoints"
+  log_dir: "experiments/medical_vocab_expand/logs"
+  expanded_vocab_dir: "data/vocab_medical_expanded_vi2en"
+
+device: "cuda"
+seed: 42
+
+# Weights & Biases
+wandb:
+  enabled: true
+  project: "nlp-medical-mt"
+  name: "medical_vocab_expand"
+  tags:
+    - "medical"
+    - "vi2en"
+    - "vocab_expansion"
+    - "fine-tuning"
+
+# Version
+version:
+  name: "medical_vocab_expand"
+  description: "Fine-tune v2 with vocabulary expansion for medical domain"
+  strategy: "Expand vocab + differential LR fine-tuning"

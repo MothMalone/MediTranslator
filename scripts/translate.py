@@ -13,6 +13,7 @@ from src.utils.config import load_config
 from src.utils.helpers import get_device
 from src.data.vocabulary import Vocabulary
 from src.models.transformer import Transformer
+from src.models.lora import apply_lora_to_model, merge_lora_weights
 from src.inference.translator import Translator
 
 
@@ -82,8 +83,8 @@ def load_translator(checkpoint_path: str, config: dict, args):
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Load vocabularies
-    vocab_dir = config['paths']['vocab_dir']
+    # Load vocabularies - check for expanded_vocab_dir first (vocab expansion models), then vocab_dir
+    vocab_dir = config['paths'].get('expanded_vocab_dir') or config['paths']['vocab_dir']
     src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
     tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
     
@@ -102,7 +103,30 @@ def load_translator(checkpoint_path: str, config: dict, args):
         pad_idx=0
     )
     
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Check if checkpoint has LoRA weights
+    state_dict = checkpoint['model_state_dict']
+    has_lora = any('lora' in key for key in state_dict.keys())
+    
+    if has_lora:
+        print("Detected LoRA checkpoint, applying LoRA to model...")
+        # Apply LoRA with same config as training
+        lora_config = config.get('lora', {})
+        model, _ = apply_lora_to_model(
+            model,
+            target_modules=lora_config.get('target_modules', ['query', 'value']),
+            rank=lora_config.get('rank', 8),
+            alpha=lora_config.get('alpha', 16),
+            dropout=0.0  # No dropout during inference
+        )
+        print("LoRA applied, loading weights...")
+    
+    model.load_state_dict(state_dict)
+    
+    # Merge LoRA weights for faster inference
+    if has_lora:
+        print("Merging LoRA weights for inference...")
+        merge_lora_weights(model)
+        print("LoRA weights merged!")
     
     # Create translator
     translator = Translator(

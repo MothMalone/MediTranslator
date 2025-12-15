@@ -20,6 +20,12 @@ from src.models.transformer import Transformer
 from src.inference.translator import Translator
 from src.evaluation.bleu import BLEUCalculator
 
+try:
+    import evaluate as hf_evaluate
+    HF_EVALUATE_AVAILABLE = True
+except ImportError:
+    HF_EVALUATE_AVAILABLE = False
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate Transformer MT model")
@@ -66,6 +72,13 @@ def parse_args():
         help="Maximum output length"
     )
     parser.add_argument(
+        "--metrics",
+        nargs='+',
+        default=['bleu'],
+        choices=['bleu', 'ter', 'meteor', 'all'],
+        help="Metrics to compute (default: bleu)"
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default=None,
@@ -79,8 +92,8 @@ def load_model(checkpoint_path: str, config: dict, device: torch.device):
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Load vocabularies
-    vocab_dir = config['paths']['vocab_dir']
+    # Load vocabularies - check for expanded_vocab_dir first (vocab expansion models), then vocab_dir
+    vocab_dir = config['paths'].get('expanded_vocab_dir') or config['paths']['vocab_dir']
     src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
     tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
     
@@ -176,23 +189,96 @@ def main():
     
     logger.info(f"Saved predictions to {args.output}")
     
-    # Calculate BLEU if references available
+    # Calculate metrics if references available
     if references:
-        logger.info("Calculating BLEU score...")
-        
-        bleu_calculator = BLEUCalculator()
-        result = bleu_calculator.calculate(predictions, references)
-        
-        logger.info("=" * 40)
+        logger.info("=" * 60)
         logger.info("Evaluation Results")
-        logger.info("=" * 40)
-        logger.info(f"BLEU Score: {result['bleu']:.2f}")
+        logger.info("=" * 60)
         
-        if 'precisions' in result:
-            for i, p in enumerate(result['precisions'], 1):
-                logger.info(f"  {i}-gram precision: {p:.1f}")
-            logger.info(f"  Brevity Penalty: {result['bp']:.3f}")
-            logger.info(f"  Length Ratio: {result['ratio']:.3f}")
+        # Determine which metrics to compute
+        metrics_to_compute = args.metrics
+        if 'all' in metrics_to_compute:
+            metrics_to_compute = ['bleu', 'ter', 'meteor']
+        
+        results = {}
+        
+        # BLEU
+        if 'bleu' in metrics_to_compute:
+            logger.info("\nCalculating BLEU score...")
+            bleu_calculator = BLEUCalculator()
+            bleu_result = bleu_calculator.calculate(predictions, references)
+            results['bleu'] = bleu_result
+            
+            logger.info(f"BLEU Score: {bleu_result['bleu']:.2f}")
+            if 'precisions' in bleu_result:
+                for i, p in enumerate(bleu_result['precisions'], 1):
+                    logger.info(f"  {i}-gram precision: {p:.1f}")
+                logger.info(f"  Brevity Penalty: {bleu_result['bp']:.3f}")
+                logger.info(f"  Length Ratio: {bleu_result['ratio']:.3f}")
+        
+        # TER (Translation Edit Rate)
+        if 'ter' in metrics_to_compute:
+            if HF_EVALUATE_AVAILABLE:
+                logger.info("\nCalculating TER score...")
+                try:
+                    ter = hf_evaluate.load('ter')
+                    # TER expects list of references for each prediction
+                    ter_result = ter.compute(
+                        predictions=predictions,
+                        references=[[ref] for ref in references]
+                    )
+                    results['ter'] = ter_result['score']
+                    logger.info(f"TER Score: {ter_result['score']:.2f}")
+                except Exception as e:
+                    logger.warning(f"Failed to calculate TER: {e}")
+            else:
+                logger.warning("TER metric requires 'evaluate' library. Install with: pip install evaluate")
+        
+        # METEOR
+        if 'meteor' in metrics_to_compute:
+            if HF_EVALUATE_AVAILABLE:
+                logger.info("\nCalculating METEOR score...")
+                try:
+                    meteor = hf_evaluate.load('meteor')
+                    meteor_result = meteor.compute(
+                        predictions=predictions,
+                        references=references
+                    )
+                    results['meteor'] = meteor_result['meteor']
+                    logger.info(f"METEOR Score: {meteor_result['meteor']:.4f}")
+                except Exception as e:
+                    logger.warning(f"Failed to calculate METEOR: {e}")
+            else:
+                logger.warning("METEOR metric requires 'evaluate' library. Install with: pip install evaluate")
+        
+        # Save results to file
+        results_file = args.output.replace('.txt', '_results.txt')
+        with open(results_file, 'w', encoding='utf-8') as f:
+            f.write("=" * 60 + "\n")
+            f.write("Evaluation Results\n")
+            f.write("=" * 60 + "\n\n")
+            f.write(f"Model: {args.checkpoint}\n")
+            f.write(f"Test source: {test_src}\n")
+            f.write(f"Test target: {test_tgt}\n")
+            f.write(f"Predictions: {args.output}\n\n")
+            
+            if 'bleu' in results:
+                f.write(f"BLEU Score: {results['bleu']['bleu']:.2f}\n")
+                if 'precisions' in results['bleu']:
+                    for i, p in enumerate(results['bleu']['precisions'], 1):
+                        f.write(f"  {i}-gram precision: {p:.1f}\n")
+                    f.write(f"  Brevity Penalty: {results['bleu']['bp']:.3f}\n")
+                    f.write(f"  Length Ratio: {results['bleu']['ratio']:.3f}\n")
+                f.write("\n")
+            
+            if 'ter' in results:
+                f.write(f"TER Score: {results['ter']:.2f}\n\n")
+            
+            if 'meteor' in results:
+                f.write(f"METEOR Score: {results['meteor']:.4f}\n\n")
+        
+        logger.info(f"\nResults saved to {results_file}")
+        logger.info("=" * 60)
     
     logger.info("Evaluation completed!")
 
