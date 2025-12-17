@@ -1,6 +1,8 @@
 """
 Translator Interface
 High-level interface for translating text using trained model.
+
+Supports both word-level and BPE (SentencePiece) vocabularies.
 """
 import torch
 import torch.nn as nn
@@ -13,21 +15,26 @@ from .beam_search import beam_search_decode
 logger = logging.getLogger(__name__)
 
 
+def is_sentencepiece_vocab(vocab) -> bool:
+    """Check if vocab is a SentencePiece vocabulary."""
+    return hasattr(vocab, 'sp') and hasattr(vocab, 'encode')
+
+
 class Translator:
     """
     High-level translation interface.
     
     Handles:
         - Loading model
-        - Tokenization
+        - Tokenization (word-level or BPE)
         - Decoding
         - Detokenization
     
     Args:
         model: Trained Transformer model
-        src_vocab: Source vocabulary
-        tgt_vocab: Target vocabulary
-        tokenizer: Tokenizer (optional)
+        src_vocab: Source vocabulary (Vocabulary or SentencePieceVocab)
+        tgt_vocab: Target vocabulary (Vocabulary or SentencePieceVocab)
+        tokenizer: Tokenizer (optional, for word-level)
         device: Device to run on
         decoding_method: 'greedy' or 'beam'
         beam_size: Beam size for beam search
@@ -56,6 +63,13 @@ class Translator:
         self.beam_size = beam_size
         self.max_length = max_length
         self.length_penalty = length_penalty
+        
+        # Detect if using BPE
+        self.use_bpe = is_sentencepiece_vocab(src_vocab)
+        if self.use_bpe:
+            logger.info("Translator using BPE (SentencePiece) tokenization")
+        else:
+            logger.info("Translator using word-level tokenization")
         
         self.model.to(self.device)
         self.model.eval()
@@ -111,26 +125,37 @@ class Translator:
         return translations
     
     def _tokenize(self, texts: List[str]) -> List[List[str]]:
-        """Tokenize input texts."""
-        if self.tokenizer:
+        """Tokenize input texts (only used for word-level)."""
+        if self.use_bpe:
+            # For BPE, we don't tokenize to strings - handled in _prepare_input
+            return texts  # Return raw texts
+        elif self.tokenizer:
             return [self.tokenizer.tokenize(text) for text in texts]
         else:
             return [text.strip().split() for text in texts]
     
-    def _prepare_input(self, tokens_list: List[List[str]]) -> torch.Tensor:
-        """Convert tokens to tensor with padding."""
-        # Encode tokens to indices
+    def _prepare_input(self, tokens_or_texts) -> torch.Tensor:
+        """Convert tokens/texts to tensor with padding."""
         encoded = []
         max_len = 0
         
-        for tokens in tokens_list:
-            # Add BOS/EOS
-            indices = [self.src_vocab.bos_idx]
-            indices.extend(self.src_vocab.encode(tokens))
-            indices.append(self.src_vocab.eos_idx)
-            
-            encoded.append(indices)
-            max_len = max(max_len, len(indices))
+        if self.use_bpe:
+            # BPE: Use SentencePiece to encode directly from text
+            for text in tokens_or_texts:
+                # SentencePieceVocab.encode returns token IDs
+                indices = self.src_vocab.encode(text, add_bos=True, add_eos=True)
+                encoded.append(indices)
+                max_len = max(max_len, len(indices))
+        else:
+            # Word-level: Convert token strings to indices
+            for tokens in tokens_or_texts:
+                # Add BOS/EOS
+                indices = [self.src_vocab.bos_idx]
+                indices.extend(self.src_vocab.encode(tokens))
+                indices.append(self.src_vocab.eos_idx)
+                
+                encoded.append(indices)
+                max_len = max(max_len, len(indices))
         
         # Pad sequences
         padded = []
@@ -198,14 +223,18 @@ class Translator:
         results = []
         
         for tokens in tokens_list:
-            # Decode indices to tokens
-            text_tokens = self.tgt_vocab.decode(tokens, skip_special=True)
-            
-            # Join tokens
-            if self.tokenizer:
-                text = self.tokenizer.detokenize(text_tokens)
+            if self.use_bpe:
+                # BPE: Use SentencePiece decode - it handles subword merging automatically
+                text = self.tgt_vocab.decode(tokens, skip_special=True)
             else:
-                text = ' '.join(text_tokens)
+                # Word-level: Decode indices to tokens, then join
+                text_tokens = self.tgt_vocab.decode(tokens, skip_special=True)
+                
+                # Join tokens
+                if self.tokenizer:
+                    text = self.tokenizer.detokenize(text_tokens)
+                else:
+                    text = ' '.join(text_tokens)
             
             results.append(text)
         

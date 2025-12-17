@@ -23,6 +23,8 @@ class TranslationDataset(Dataset):
         src_vocab,
         tgt_vocab,
         tokenize_fn: Optional[Callable] = None,
+        src_tokenizer: Optional[object] = None,
+        tgt_tokenizer: Optional[object] = None,
         max_length: int = 512,
         add_bos_eos: bool = True
     ):
@@ -41,6 +43,11 @@ class TranslationDataset(Dataset):
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
         self.tokenize_fn = tokenize_fn or (lambda x: x.strip().split())
+        # Optional higher-level tokenizers (e.g., SentencePiece/Tokenizer)
+        # If provided, they should implement `encode(text)` returning either
+        # a list of token ids (ints) or a list of tokens (strs).
+        self.src_tokenizer = src_tokenizer
+        self.tgt_tokenizer = tgt_tokenizer
         self.max_length = max_length
         self.add_bos_eos = add_bos_eos
         
@@ -52,31 +59,55 @@ class TranslationDataset(Dataset):
     
     def _load_data(self, src_file: str, tgt_file: str):
         """Load and process parallel data."""
+        skipped_pairs = 0
         with open(src_file, 'r', encoding='utf-8') as f_src, \
              open(tgt_file, 'r', encoding='utf-8') as f_tgt:
-            
+
             for src_line, tgt_line in zip(f_src, f_tgt):
-                # Tokenize
-                src_tokens = self.tokenize_fn(src_line)
-                tgt_tokens = self.tokenize_fn(tgt_line)
-                
-                # Truncate if necessary
-                if len(src_tokens) > self.max_length - 2:  # Account for BOS/EOS
-                    src_tokens = src_tokens[:self.max_length - 2]
-                if len(tgt_tokens) > self.max_length - 2:
-                    tgt_tokens = tgt_tokens[:self.max_length - 2]
-                
-                # Convert to indices
-                src_indices = self.src_vocab.encode(src_tokens)
-                tgt_indices = self.tgt_vocab.encode(tgt_tokens)
-                
+                src_line = src_line.strip()
+                tgt_line = tgt_line.strip()
+
+                # --- SOURCE encoding ---
+                if self.src_tokenizer is not None:
+                    # tokenizer.encode may return ids (ints) or tokens (strs)
+                    src_enc = self.src_tokenizer.encode(src_line)
+                    if len(src_enc) > 0 and isinstance(src_enc[0], int):
+                        src_indices = list(src_enc)
+                    else:
+                        src_indices = self.src_vocab.encode(list(src_enc))
+                else:
+                    src_tokens = self.tokenize_fn(src_line)
+                    src_indices = self.src_vocab.encode(src_tokens)
+
+                # --- TARGET encoding ---
+                if self.tgt_tokenizer is not None:
+                    tgt_enc = self.tgt_tokenizer.encode(tgt_line)
+                    if len(tgt_enc) > 0 and isinstance(tgt_enc[0], int):
+                        tgt_indices = list(tgt_enc)
+                    else:
+                        tgt_indices = self.tgt_vocab.encode(list(tgt_enc))
+                else:
+                    tgt_tokens = self.tokenize_fn(tgt_line)
+                    tgt_indices = self.tgt_vocab.encode(tgt_tokens)
+
+                # Reserve room for BOS/EOS if needed
+                effective_src_len = len(src_indices) + (2 if self.add_bos_eos else 0)
+                effective_tgt_len = len(tgt_indices) + (2 if self.add_bos_eos else 0)
+
+                # FILTER pairs that would exceed max_length (do not truncate targets)
+                if effective_src_len > self.max_length or effective_tgt_len > self.max_length:
+                    skipped_pairs += 1
+                    continue
+
                 # Add BOS/EOS tokens
                 if self.add_bos_eos:
                     src_indices = [self.src_vocab.bos_idx] + src_indices + [self.src_vocab.eos_idx]
                     tgt_indices = [self.tgt_vocab.bos_idx] + tgt_indices + [self.tgt_vocab.eos_idx]
-                
+
                 self.src_data.append(torch.tensor(src_indices, dtype=torch.long))
                 self.tgt_data.append(torch.tensor(tgt_indices, dtype=torch.long))
+
+        logger.info(f"Loaded {len(self.src_data)} sentence pairs (skipped {skipped_pairs} too-long pairs)")
         
         logger.info(f"Loaded {len(self.src_data)} sentence pairs")
     

@@ -1,6 +1,8 @@
 """
 Translation Script
 Translate text using trained model.
+
+Supports both word-level (JSON) and BPE (SentencePiece) vocabularies.
 """
 import argparse
 import os
@@ -12,9 +14,53 @@ import torch
 from src.utils.config import load_config
 from src.utils.helpers import get_device
 from src.data.vocabulary import Vocabulary
+from src.data.sp_vocab import SentencePieceVocab
 from src.models.transformer import Transformer
-from src.models.lora import apply_lora_to_model, merge_lora_weights
 from src.inference.translator import Translator
+
+
+def load_vocabs(vocab_dir: str, tokenization: str = "word"):
+    """
+    Load vocabularies based on tokenization type.
+    
+    Args:
+        vocab_dir: Directory containing vocabulary files
+        tokenization: "bpe" for SentencePiece, "word" for JSON vocabularies
+        
+    Returns:
+        (src_vocab, tgt_vocab) tuple
+    """
+    if tokenization == "bpe":
+        # Load SentencePiece models
+        src_sp_path = os.path.join(vocab_dir, 'src.model')
+        tgt_sp_path = os.path.join(vocab_dir, 'tgt.model')
+        
+        if os.path.exists(src_sp_path) and os.path.exists(tgt_sp_path):
+            print(f"Loading BPE (SentencePiece) vocabularies from {vocab_dir}")
+            src_vocab = SentencePieceVocab(src_sp_path)
+            tgt_vocab = SentencePieceVocab(tgt_sp_path)
+            return src_vocab, tgt_vocab
+        else:
+            raise FileNotFoundError(
+                f"BPE tokenization configured but SentencePiece models not found in {vocab_dir}.\n"
+                f"Expected: {src_sp_path} and {tgt_sp_path}\n"
+                f"Run: python scripts/train_bpe.py --config <your_config.yaml>"
+            )
+    else:
+        # Load word-level JSON vocabularies
+        src_path = os.path.join(vocab_dir, 'src_vocab.json')
+        tgt_path = os.path.join(vocab_dir, 'tgt_vocab.json')
+        
+        if os.path.exists(src_path) and os.path.exists(tgt_path):
+            print(f"Loading word-level vocabularies from {vocab_dir}")
+            src_vocab = Vocabulary.load(src_path)
+            tgt_vocab = Vocabulary.load(tgt_path)
+            return src_vocab, tgt_vocab
+        else:
+            raise FileNotFoundError(
+                f"Word-level vocabularies not found in {vocab_dir}.\n"
+                f"Expected: {src_path} and {tgt_path}"
+            )
 
 
 def parse_args():
@@ -83,10 +129,12 @@ def load_translator(checkpoint_path: str, config: dict, args):
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
+    # Determine tokenization type
+    tokenization = config.get('vocab', {}).get('tokenization', 'word')
+    
     # Load vocabularies - check for expanded_vocab_dir first (vocab expansion models), then vocab_dir
     vocab_dir = config['paths'].get('expanded_vocab_dir') or config['paths']['vocab_dir']
-    src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
-    tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
+    src_vocab, tgt_vocab = load_vocabs(vocab_dir, tokenization)
     
     # Create model
     model_config = config['model']

@@ -15,16 +15,18 @@ from src.utils.config import load_config
 from src.utils.logger import setup_logger
 from src.utils.helpers import get_device
 from src.data.vocabulary import Vocabulary
+from src.data.sp_vocab import SentencePieceVocab
 from src.data.dataset import TranslationDataset, create_dataloader
 from src.models.transformer import Transformer
 from src.inference.translator import Translator
 from src.evaluation.bleu import BLEUCalculator
 
 try:
-    import evaluate as hf_evaluate
+    from evaluate import load as load_metric
     HF_EVALUATE_AVAILABLE = True
 except ImportError:
     HF_EVALUATE_AVAILABLE = False
+    load_metric = None
 
 
 def parse_args():
@@ -94,8 +96,23 @@ def load_model(checkpoint_path: str, config: dict, device: torch.device):
     
     # Load vocabularies - check for expanded_vocab_dir first (vocab expansion models), then vocab_dir
     vocab_dir = config['paths'].get('expanded_vocab_dir') or config['paths']['vocab_dir']
-    src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
-    tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
+    vocab_config = config.get('vocab', {})
+    use_bpe = vocab_config.get('tokenization') == 'bpe'
+    
+    if use_bpe:
+        # BPE: Load SentencePiece models
+        src_model_path = os.path.join(vocab_dir, 'src.model')
+        tgt_model_path = os.path.join(vocab_dir, 'tgt.model')
+        
+        if os.path.exists(src_model_path) and os.path.exists(tgt_model_path):
+            src_vocab = SentencePieceVocab(src_model_path)
+            tgt_vocab = SentencePieceVocab(tgt_model_path)
+        else:
+            raise FileNotFoundError(f"SentencePiece models not found in {vocab_dir}")
+    else:
+        # Word-level vocabularies
+        src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
+        tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
     
     # Create model
     model_config = config['model']
@@ -221,7 +238,7 @@ def main():
             if HF_EVALUATE_AVAILABLE:
                 logger.info("\nCalculating TER score...")
                 try:
-                    ter = hf_evaluate.load('ter')
+                    ter = load_metric('ter')
                     # TER expects list of references for each prediction
                     ter_result = ter.compute(
                         predictions=predictions,
@@ -239,7 +256,7 @@ def main():
             if HF_EVALUATE_AVAILABLE:
                 logger.info("\nCalculating METEOR score...")
                 try:
-                    meteor = hf_evaluate.load('meteor')
+                    meteor = load_metric('meteor')
                     meteor_result = meteor.compute(
                         predictions=predictions,
                         references=references
