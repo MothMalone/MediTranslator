@@ -108,8 +108,7 @@ class TranslationDataset(Dataset):
                 self.tgt_data.append(torch.tensor(tgt_indices, dtype=torch.long))
 
         logger.info(f"Loaded {len(self.src_data)} sentence pairs (skipped {skipped_pairs} too-long pairs)")
-        
-        logger.info(f"Loaded {len(self.src_data)} sentence pairs")
+
     
     def __len__(self) -> int:
         return len(self.src_data)
