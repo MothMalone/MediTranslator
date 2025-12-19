@@ -7,9 +7,9 @@ data:
   tgt_lang: "vi"
   train_src: "data/raw_IWSLT'15_en-vi/train.en.txt"
   train_tgt: "data/raw_IWSLT'15_en-vi/train.vi.txt"
-  # Validation files (if not exist, will auto-split from training)
-  val_src: "data/raw_IWSLT'15_en-vi/val.en.txt"
-  val_tgt: "data/raw_IWSLT'15_en-vi/val.vi.txt"
+  # Validation files - Using tst2012 for validation
+  val_src: "data/raw_IWSLT'15_en-vi/tst2012.en.txt"
+  val_tgt: "data/raw_IWSLT'15_en-vi/tst2012.vi.txt"
   val_split: 0.1 # 10% of training data for validation if val files don't exist
   test_src: "data/raw_IWSLT'15_en-vi/tst2013.en.txt"
   test_tgt: "data/raw_IWSLT'15_en-vi/tst2013.vi.txt"
@@ -17,8 +17,9 @@ data:
 
 # Vocabulary
 vocab:
-  src_vocab_size: 32000
-  tgt_vocab_size: 32000
+  tokenization: "bpe" # Use BPE tokenization
+  src_vocab_size: 16000 # Reduced for better token learning
+  tgt_vocab_size: 16000
   min_freq: 2
 
 # Model - Same architecture
@@ -31,15 +32,16 @@ model:
   dropout: 0.1
   max_seq_length: 512
 
-# Training - Improved
+# Training - Improved & Optimized
 training:
-  batch_size: 32
-  epochs: 50
+  batch_size: 64 # Increased from 32
+  epochs: 30 # Reduced from 50 (faster convergence)
   optimizer: "adamw" # Changed to AdamW
-  learning_rate: 0.0001
+  learning_rate: 0.001 # Increased from 0.0001 (7x boost)
   weight_decay: 0.01 # Added weight decay
-  scheduler: "warmup"
-  warmup_steps: 4000
+  scheduler: "cosine" # Changed from warmup for better decay
+  use_mixed_precision: true # Enable mixed precision training (FP16)
+  warmup_steps: 6000 # Increased from 4000
   label_smoothing: 0.1 # Added label smoothing
   gradient_accumulation_steps: 2 # Effective batch size = 64
   max_grad_norm: 1.0
@@ -49,7 +51,7 @@ training:
   log_every: 100
 
   use_wandb: true
-  early_stopping_patience: 5
+  early_stopping_patience: 12 # Increased from 5 for more patience
 
   # BLEU computation during validation
   compute_bleu: true

@@ -258,8 +258,7 @@ def main():
         val_loader=val_loader,
         config=config,
         device=device,
-        tgt_vocab=tgt_vocab,
-        src_vocab=src_vocab
+        tgt_vocab=tgt_vocab
     )
     
     # Resume from checkpoint if specified
