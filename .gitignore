@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+logs/
+*.log
+
+# Checkpoints & Model files
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Data (optional - uncomment if you don't want to track large data files)
+# data/raw*/
+# data/vocab*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WandB
+wandb/

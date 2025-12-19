@@ -7,9 +7,9 @@ data:
   tgt_lang: "vi"
   train_src: "data/raw_IWSLT'15_en-vi/train.en.txt"
   train_tgt: "data/raw_IWSLT'15_en-vi/train.vi.txt"
-  # Validation files (if not exist, will auto-split from training)
-  val_src: "data/raw_IWSLT'15_en-vi/val.en.txt"
-  val_tgt: "data/raw_IWSLT'15_en-vi/val.vi.txt"
+  # Validation files - Using tst2012 for validation
+  val_src: "data/raw_IWSLT'15_en-vi/tst2012.en.txt"
+  val_tgt: "data/raw_IWSLT'15_en-vi/tst2012.vi.txt"
   val_split: 0.1 # 10% of training data for validation if val files don't exist
   test_src: "data/raw_IWSLT'15_en-vi/tst2013.en.txt"
   test_tgt: "data/raw_IWSLT'15_en-vi/tst2013.vi.txt"

@@ -1,332 +1,190 @@
 """
 BLEU Score Calculation
-Implements BLEU (Bilingual Evaluation Understudy) metric for machine translation.
+Uses sacrebleu - the industry-standard BLEU implementation.
+
+sacrebleu provides:
+- Accurate, standardized BLEU computation
+- Compatible with WMT/official evaluation
+- Handles tokenization edge cases correctly
+- Much faster than custom implementation
 """
-import math
-from collections import Counter
-from typing import List, Tuple, Optional
+from typing import List
 import logging
 
+# Use sacrebleu for accurate BLEU scoring
+try:
+    from sacrebleu.metrics import BLEU
+    SACREBLEU_AVAILABLE = True
+except ImportError:
+    SACREBLEU_AVAILABLE = False
+    logging.warning("sacrebleu not available. Install with: pip install sacrebleu")
+
 logger = logging.getLogger(__name__)
-
-
-def get_ngrams(tokens: List[str], n: int) -> Counter:
-    """
-    Extract n-grams from a list of tokens.
-    
-    Args:
-        tokens: List of tokens
-        n: N-gram order
-        
-    Returns:
-        Counter of n-grams
-    """
-    ngrams = []
-    for i in range(len(tokens) - n + 1):
-        ngram = tuple(tokens[i:i + n])
-        ngrams.append(ngram)
-    return Counter(ngrams)
-
-
-def modified_precision(
-    hypothesis: List[str],
-    references: List[List[str]],
-    n: int
-) -> Tuple[int, int]:
-    """
-    Calculate modified precision for n-grams.
-    
-    Clips each n-gram count by its maximum reference count.
-    
-    Args:
-        hypothesis: Hypothesis tokens
-        references: List of reference token lists
-        n: N-gram order
-        
-    Returns:
-        Tuple of (clipped count, total count)
-    """
-    # Get hypothesis n-grams
-    hyp_ngrams = get_ngrams(hypothesis, n)
-    
-    if not hyp_ngrams:
-        return 0, 0
-    
-    # Get maximum reference n-gram counts
-    max_ref_counts = Counter()
-    for reference in references:
-        ref_ngrams = get_ngrams(reference, n)
-        for ngram, count in ref_ngrams.items():
-            max_ref_counts[ngram] = max(max_ref_counts[ngram], count)
-    
-    # Calculate clipped count
-    clipped_count = 0
-    total_count = 0
-    
-    for ngram, count in hyp_ngrams.items():
-        clipped_count += min(count, max_ref_counts[ngram])
-        total_count += count
-    
-    return clipped_count, total_count
-
-
-def brevity_penalty(
-    hypothesis_length: int,
-    reference_lengths: List[int]
-) -> float:
-    """
-    Calculate brevity penalty.
-    
-    Penalizes hypotheses shorter than references.
-    
-    Args:
-        hypothesis_length: Length of hypothesis
-        reference_lengths: Lengths of references
-        
-    Returns:
-        Brevity penalty factor (0-1)
-    """
-    if hypothesis_length == 0:
-        return 0.0
-    
-    # Find closest reference length
-    closest_length = min(
-        reference_lengths,
-        key=lambda ref_len: (abs(ref_len - hypothesis_length), ref_len)
-    )
-    
-    if hypothesis_length >= closest_length:
-        return 1.0
-    else:
-        return math.exp(1 - closest_length / hypothesis_length)
-
-
-def sentence_bleu(
-    hypothesis: List[str],
-    references: List[List[str]],
-    max_n: int = 4,
-    weights: Optional[Tuple[float, ...]] = None
-) -> float:
-    """
-    Calculate sentence-level BLEU score.
-    
-    Args:
-        hypothesis: Hypothesis tokens
-        references: List of reference token lists
-        max_n: Maximum n-gram order
-        weights: Weights for each n-gram order
-        
-    Returns:
-        BLEU score (0-1)
-    """
-    if weights is None:
-        weights = tuple([1.0 / max_n] * max_n)
-    
-    # Calculate modified precision for each n-gram order
-    precisions = []
-    for n in range(1, max_n + 1):
-        clipped, total = modified_precision(hypothesis, references, n)
-        if total == 0:
-            precision = 0.0
-        else:
-            precision = clipped / total
-        precisions.append(precision)
-    
-    # Check for zero precisions
-    if 0 in precisions:
-        return 0.0
-    
-    # Calculate geometric mean of precisions
-    log_precision_sum = sum(
-        w * math.log(p) for w, p in zip(weights, precisions)
-    )
-    
-    # Calculate brevity penalty
-    bp = brevity_penalty(
-        len(hypothesis),
-        [len(ref) for ref in references]
-    )
-    
-    # Calculate final BLEU
-    bleu = bp * math.exp(log_precision_sum)
-    
-    return bleu
 
 
 def corpus_bleu(
     hypotheses: List[List[str]],
     references: List[List[List[str]]],
     max_n: int = 4,
-    weights: Optional[Tuple[float, ...]] = None
+    smooth: bool = False
 ) -> float:
     """
-    Calculate corpus-level BLEU score.
+    Calculate corpus-level BLEU score using sacrebleu.
+    
+    This is the recommended way to compute BLEU for machine translation.
+    Uses the official sacrebleu implementation which is:
+    - More accurate than custom implementations
+    - Compatible with WMT evaluation
+    - Handles edge cases correctly
     
     Args:
         hypotheses: List of hypothesis token lists
-        references: List of reference lists (each hypothesis can have multiple references)
-        max_n: Maximum n-gram order
-        weights: Weights for each n-gram order
+            Example: [['I', 'love', 'python'], ['hello', 'world']]
+        references: List of reference token lists (each hyp can have multiple refs)
+            Example: [[['I', 'love', 'python']], [['hello', 'world']]]
+        max_n: Maximum n-gram order (default: 4 for BLEU-4)
+        smooth: Use smoothing for zero counts
         
     Returns:
-        BLEU score (0-1)
+        BLEU score as a float (0-1 range)
+        
+    Note:
+        sacrebleu expects strings, so we join tokens with spaces
     """
-    if weights is None:
-        weights = tuple([1.0 / max_n] * max_n)
-    
-    # Accumulate counts across corpus
-    total_clipped = [0] * max_n
-    total_count = [0] * max_n
-    total_hyp_length = 0
-    total_ref_length = 0
-    
-    for hyp, refs in zip(hypotheses, references):
-        # Accumulate n-gram counts
-        for n in range(1, max_n + 1):
-            clipped, count = modified_precision(hyp, refs, n)
-            total_clipped[n-1] += clipped
-            total_count[n-1] += count
-        
-        # Accumulate lengths for brevity penalty
-        total_hyp_length += len(hyp)
-        
-        # Find closest reference length
-        ref_lengths = [len(ref) for ref in refs]
-        closest_ref_length = min(
-            ref_lengths,
-            key=lambda ref_len: (abs(ref_len - len(hyp)), ref_len)
-        )
-        total_ref_length += closest_ref_length
-    
-    # Calculate corpus-level precisions
-    precisions = []
-    for n in range(max_n):
-        if total_count[n] == 0:
-            precision = 0.0
-        else:
-            precision = total_clipped[n] / total_count[n]
-        precisions.append(precision)
-    
-    # Check for zero precisions (add smoothing)
-    if 0 in precisions:
-        # Use smoothing: add small count
+    if not SACREBLEU_AVAILABLE:
+        logger.error("sacrebleu not installed. Cannot compute BLEU score.")
         return 0.0
     
-    # Calculate geometric mean
-    log_precision_sum = sum(
-        w * math.log(p) for w, p in zip(weights, precisions)
-    )
+    if not hypotheses or not references:
+        logger.warning("Empty hypotheses or references")
+        return 0.0
     
-    # Calculate brevity penalty
-    if total_hyp_length >= total_ref_length:
-        bp = 1.0
-    else:
-        bp = math.exp(1 - total_ref_length / total_hyp_length)
+    # Convert token lists to strings (sacrebleu expects strings)
+    hyp_strings = [' '.join(tokens) for tokens in hypotheses]
     
-    # Calculate final BLEU
-    bleu = bp * math.exp(log_precision_sum)
+    # sacrebleu expects references as List[List[str]] where inner lists are multiple refs per hypothesis
+    # Our format: references[i] = [[ref1_tokens], [ref2_tokens], ...]
+    # Need: refs_transposed[ref_idx][hyp_idx] = ref_string
     
-    return bleu
+    # Get number of references per hypothesis (assume all have same number)
+    num_refs = len(references[0]) if references else 0
+    
+    # Transpose and convert to strings
+    ref_strings = []
+    for ref_idx in range(num_refs):
+        ref_list = []
+        for hyp_idx in range(len(references)):
+            tokens = references[hyp_idx][ref_idx]
+            ref_list.append(' '.join(tokens))
+        ref_strings.append(ref_list)
+    
+    # Compute BLEU
+    bleu = BLEU(max_ngram_order=max_n, smooth_method='exp' if smooth else 'none')
+    result = bleu.corpus_score(hyp_strings, ref_strings)
+    
+    # sacrebleu returns score in 0-100 range, convert to 0-1
+    return result.score / 100.0
 
 
-def compute_bleu(
-    hypotheses: List[str],
-    references: List[str],
-    tokenize: bool = True
+def sentence_bleu(
+    hypothesis: List[str],
+    references: List[List[str]],
+    max_n: int = 4,
+    smooth: bool = False
 ) -> float:
     """
-    Convenience function to compute BLEU from strings.
+    Calculate sentence-level BLEU score using sacrebleu.
     
     Args:
-        hypotheses: List of hypothesis strings
-        references: List of reference strings
-        tokenize: Whether to tokenize by whitespace
+        hypothesis: Hypothesis token list
+        references: List of reference token lists
+        max_n: Maximum n-gram order
+        smooth: Use smoothing
         
     Returns:
-        BLEU score (0-100)
+        BLEU score (0-1 range)
     """
-    if tokenize:
-        hyp_tokens = [hyp.strip().split() for hyp in hypotheses]
-        ref_tokens = [[ref.strip().split()] for ref in references]
-    else:
-        hyp_tokens = hypotheses
-        ref_tokens = [[ref] for ref in references]
-    
-    bleu = corpus_bleu(hyp_tokens, ref_tokens)
-    
-    return bleu * 100
+    # Use corpus_bleu with single sentence
+    return corpus_bleu([hypothesis], [references], max_n=max_n, smooth=smooth)
+
+
+# Backward compatibility alias
+def compute_bleu(hypotheses: List[List[str]], references: List[List[List[str]]], 
+                 max_n: int = 4) -> float:
+    """Alias for corpus_bleu for backward compatibility."""
+    return corpus_bleu(hypotheses, references, max_n=max_n)
 
 
 class BLEUCalculator:
     """
-    BLEU Calculator class with support for sacrebleu.
+    BLEU Calculator wrapper for sacrebleu.
     
-    Can use either custom implementation or sacrebleu library.
+    Provides a convenient interface for calculating BLEU scores from strings.
+    Uses sacrebleu which is case-insensitive by default (standard MT evaluation).
     """
     
-    def __init__(self, use_sacrebleu: bool = True):
+    def __init__(self, lowercase: bool = True, tokenize: str = '13a'):
         """
         Initialize BLEU calculator.
         
         Args:
-            use_sacrebleu: Whether to use sacrebleu library
+            lowercase: Lowercase text before scoring (default: True, standard practice)
+            tokenize: Tokenization method ('13a', 'intl', 'zh', 'none')
+                      '13a' = standard Moses tokenizer (recommended)
         """
-        self.use_sacrebleu = use_sacrebleu
+        if not SACREBLEU_AVAILABLE:
+            raise ImportError("sacrebleu required. Install with: pip install sacrebleu")
         
-        if use_sacrebleu:
-            try:
-                import sacrebleu
-                self.sacrebleu = sacrebleu
-                logger.info("Using sacrebleu for BLEU calculation")
-            except ImportError:
-                logger.warning("sacrebleu not available, using custom implementation")
-                self.use_sacrebleu = False
+        self.bleu = BLEU(lowercase=lowercase, tokenize=tokenize)
+        logger.info(f"BLEUCalculator initialized (lowercase={lowercase}, tokenize={tokenize})")
     
-    def calculate(
-        self,
-        hypotheses: List[str],
-        references: List[str]
-    ) -> dict:
+    def calculate(self, hypotheses: List[str], references: List[str]) -> dict:
         """
-        Calculate BLEU score.
+        Calculate BLEU score from string lists.
         
         Args:
             hypotheses: List of hypothesis strings
-            references: List of reference strings
+            references: List of reference strings (one per hypothesis)
             
         Returns:
-            Dictionary with BLEU score and other metrics
+            Dictionary with:
+                - bleu: BLEU score (0-100 range, standard MT reporting)
+                - precisions: List of n-gram precisions [1-gram, 2-gram, 3-gram, 4-gram]
+                - bp: Brevity penalty (0-1)
+                - ratio: Length ratio (hypothesis / reference)
+                - hyp_len: Total hypothesis length
+                - ref_len: Total reference length
         """
-        if self.use_sacrebleu:
-            bleu = self.sacrebleu.corpus_bleu(hypotheses, [references])
-            return {
-                'bleu': bleu.score,
-                'precisions': bleu.precisions,
-                'bp': bleu.bp,
-                'ratio': bleu.sys_len / bleu.ref_len,
-                'hyp_len': bleu.sys_len,
-                'ref_len': bleu.ref_len
-            }
-        else:
-            bleu = compute_bleu(hypotheses, references)
-            return {
-                'bleu': bleu
-            }
+        if len(hypotheses) != len(references):
+            raise ValueError(f"Mismatch: {len(hypotheses)} hypotheses vs {len(references)} references")
+        
+        # sacrebleu expects references as List[List[str]]
+        # where each inner list contains all reference translations for one source
+        refs_transposed = [[ref] for ref in references]
+        refs_transposed = list(zip(*refs_transposed))  # Transpose to [[ref1, ref2, ...]]
+        
+        # Compute corpus BLEU
+        result = self.bleu.corpus_score(hypotheses, refs_transposed)
+        
+        return {
+            'bleu': result.score,  # 0-100 range
+            'precisions': result.precisions,
+            'bp': result.bp,
+            'ratio': result.sys_len / result.ref_len if result.ref_len > 0 else 0.0,
+            'hyp_len': result.sys_len,
+            'ref_len': result.ref_len
+        }
     
-    def calculate_from_files(
-        self,
-        hypothesis_file: str,
-        reference_file: str
-    ) -> dict:
+    def calculate_from_files(self, hypothesis_file: str, reference_file: str) -> dict:
         """
-        Calculate BLEU from files.
+        Calculate BLEU from text files.
         
         Args:
-            hypothesis_file: Path to hypothesis file
-            reference_file: Path to reference file
+            hypothesis_file: Path to hypothesis file (one sentence per line)
+            reference_file: Path to reference file (one sentence per line)
             
         Returns:
-            Dictionary with BLEU score
+            Dictionary with BLEU metrics
         """
         with open(hypothesis_file, 'r', encoding='utf-8') as f:
             hypotheses = [line.strip() for line in f]
@@ -339,20 +197,28 @@ class BLEUCalculator:
 
 if __name__ == "__main__":
     # Test BLEU calculation
-    hypotheses = [
-        "the cat sat on the mat",
-        "there is a cat on the mat"
-    ]
-    references = [
-        "the cat is on the mat",
-        "there is a cat on the mat"
-    ]
+    print("Testing BLEU with sacrebleu...")
     
-    # Test custom implementation
-    bleu = compute_bleu(hypotheses, references)
-    print(f"Custom BLEU: {bleu:.2f}")
+    # Example 1: Perfect match
+    hyp = [['the', 'cat', 'is', 'on', 'the', 'mat']]
+    ref = [[['the', 'cat', 'is', 'on', 'the', 'mat']]]
+    score = corpus_bleu(hyp, ref)
+    print(f"Perfect match BLEU: {score:.4f} (expected: 1.0)")
     
-    # Test with BLEUCalculator
-    calculator = BLEUCalculator(use_sacrebleu=False)
-    result = calculator.calculate(hypotheses, references)
-    print(f"BLEUCalculator: {result}")
+    # Example 2: Partial match
+    hyp = [['the', 'cat', 'sat', 'on', 'the', 'mat']]
+    ref = [[['the', 'cat', 'is', 'on', 'the', 'mat']]]
+    score = corpus_bleu(hyp, ref)
+    print(f"Partial match BLEU: {score:.4f}")
+    
+    # Example 3: Multiple sentences
+    hyp = [
+        ['the', 'cat', 'is', 'sleeping'],
+        ['I', 'love', 'python']
+    ]
+    ref = [
+        [['the', 'cat', 'is', 'sleeping']],
+        [['I', 'love', 'python']]
+    ]
+    score = corpus_bleu(hyp, ref)
+    print(f"Corpus BLEU: {score:.4f}")

@@ -230,7 +230,7 @@ class Trainer:
             self.metrics.update(
                 loss.item() * self.grad_accum_steps,
                 n_tokens,
-                self.scheduler.get_lr() if self.scheduler else self.optimizer.param_groups[0]['lr']
+                self.optimizer.param_groups[0]['lr']
             )
             
             # Gradient accumulation step
@@ -263,7 +263,7 @@ class Trainer:
                     train_loss, train_ppl = self.metrics.log_train_step(
                         self.global_step, epoch
                     )
-                    lr = self.scheduler.get_lr() if self.scheduler else self.optimizer.param_groups[0]['lr']
+                    lr = self.optimizer.param_groups[0]['lr']
                     progress_bar.set_postfix({
                         'loss': f'{train_loss:.4f}',
                         'ppl': f'{train_ppl:.2f}',
