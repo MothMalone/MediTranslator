@@ -15,7 +15,6 @@ from .loss import LabelSmoothingLoss, CrossEntropyLoss
 from .optimizer import get_optimizer, get_scheduler
 from .metrics import MetricsTracker, compute_token_accuracy
 from ..inference.greedy_search import greedy_decode
-from ..evaluation.bleu import corpus_bleu
 
 logger = logging.getLogger(__name__)
 
@@ -320,9 +319,9 @@ class Trainer:
         total_loss = 0.0
         total_tokens = 0
         
-        # For BLEU calculation
-        hypotheses = []
-        references = []
+        # For BLEU calculation (using strings for BLEUCalculator compatibility)
+        hypotheses = []  # List of hypothesis strings
+        references = []  # List of reference strings
         sample_count = 0
         
         for batch in tqdm(self.val_loader, desc="Validating", leave=False):
@@ -353,33 +352,45 @@ class Trainer:
                     pad_idx=self.tgt_vocab.pad_idx if hasattr(self.tgt_vocab, 'pad_idx') else 0
                 )
                 
-                # Convert to tokens
+                # Convert to text strings (not tokens) for proper BLEU calculation
                 for i in range(min(src.size(0), self.bleu_max_samples - sample_count)):
-                    # Hypothesis
+                    # Hypothesis - decode properly (handles both BPE and word-level)
                     hyp_ids = generated[i].cpu().tolist()
-                    hyp_tokens = []
-                    for idx in hyp_ids:
-                        if idx in [self.tgt_vocab.pad_idx, self.tgt_vocab.bos_idx]:  # Skip PAD and BOS
-                            continue
-                        if idx == self.tgt_vocab.eos_idx:  # Stop at EOS
-                            break
-                        token = self.tgt_vocab.idx2token.get(idx, '<unk>') if hasattr(self.tgt_vocab, 'idx2token') else str(idx)
-                        hyp_tokens.append(token)
+                    if hasattr(self.tgt_vocab, 'decode'):
+                        # SentencePiece vocab - use decode method for proper detokenization
+                        hyp_text = self.tgt_vocab.decode(hyp_ids)
+                    else:
+                        # Word-level vocab - manual conversion
+                        hyp_tokens = []
+                        for idx in hyp_ids:
+                            if idx in [self.tgt_vocab.pad_idx, self.tgt_vocab.bos_idx]:
+                                continue
+                            if idx == self.tgt_vocab.eos_idx:
+                                break
+                            token = self.tgt_vocab.idx2token.get(idx, '<unk>')
+                            hyp_tokens.append(token)
+                        hyp_text = ' '.join(hyp_tokens)
                     
-                    # Reference
+                    # Reference - decode properly
                     ref_ids = tgt[i].cpu().tolist()
-                    ref_tokens = []
-                    for idx in ref_ids:
-                        if idx in [self.tgt_vocab.pad_idx, self.tgt_vocab.bos_idx]:  # Skip PAD and BOS
-                            continue
-                        if idx == self.tgt_vocab.eos_idx:  # Stop at EOS
-                            break
-                        token = self.tgt_vocab.idx2token.get(idx, '<unk>') if hasattr(self.tgt_vocab, 'idx2token') else str(idx)
-                        ref_tokens.append(token)
+                    if hasattr(self.tgt_vocab, 'decode'):
+                        # SentencePiece vocab
+                        ref_text = self.tgt_vocab.decode(ref_ids)
+                    else:
+                        # Word-level vocab
+                        ref_tokens = []
+                        for idx in ref_ids:
+                            if idx in [self.tgt_vocab.pad_idx, self.tgt_vocab.bos_idx]:
+                                continue
+                            if idx == self.tgt_vocab.eos_idx:
+                                break
+                            token = self.tgt_vocab.idx2token.get(idx, '<unk>')
+                            ref_tokens.append(token)
+                        ref_text = ' '.join(ref_tokens)
                     
-                    if hyp_tokens and ref_tokens:
-                        hypotheses.append(hyp_tokens)
-                        references.append([ref_tokens])
+                    if hyp_text.strip() and ref_text.strip():
+                        hypotheses.append(hyp_text)
+                        references.append(ref_text)
                         sample_count += 1
                     
                     if sample_count >= self.bleu_max_samples:
@@ -388,11 +399,14 @@ class Trainer:
         val_loss = total_loss / max(total_tokens, 1)
         val_loss, val_ppl = self.metrics.log_val_step(val_loss, self.global_step)
         
-        # Calculate BLEU score
+        # Calculate BLEU score using BLEUCalculator for consistency with evaluate.py
         bleu_score = 0.0
         if self.compute_bleu and hypotheses:
             try:
-                bleu_score = corpus_bleu(hypotheses, references, max_n=4) * 100  # Convert to percentage
+                from ..evaluation.bleu import BLEUCalculator
+                bleu_calculator = BLEUCalculator(lowercase=True, tokenize='13a')
+                bleu_result = bleu_calculator.calculate(hypotheses, references)
+                bleu_score = bleu_result['bleu']  # Already in 0-100 range
                 logger.info(f"Validation - Loss: {val_loss:.4f}, PPL: {val_ppl:.2f}, BLEU: {bleu_score:.2f}")
             except Exception as e:
                 logger.warning(f"Failed to compute BLEU: {e}")
