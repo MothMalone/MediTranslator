@@ -55,12 +55,14 @@ class Transformer(nn.Module):
         share_embeddings: bool = False,
         activation: str = 'relu',
         norm_first: bool = False,
-        pad_idx: int = 0
+        pad_idx: int = 0,
+        use_xavier_init: bool = True
     ):
         super().__init__()
         
         self.d_model = d_model
         self.pad_idx = pad_idx
+        self.use_xavier_init = use_xavier_init
         
         # Source Embedding
         self.src_embedding = nn.Embedding(
@@ -116,9 +118,11 @@ class Transformer(nn.Module):
     
     def _init_weights(self):
         """Initialize model weights."""
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
+        if self.use_xavier_init:
+            # Xavier initialization for better gradient flow
+            for p in self.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
         
         # Scale embeddings
         nn.init.normal_(self.src_embedding.weight, mean=0, std=self.d_model ** -0.5)

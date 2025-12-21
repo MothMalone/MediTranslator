@@ -15,34 +15,40 @@ data:
   test_tgt: "data/raw_IWSLT'15_en-vi/tst2013.vi.txt"
   max_seq_length: 128
 
-# Vocabulary
+# Vocabulary - Basic word-level tokenization
 vocab:
-  src_vocab_size: 40000 # Increased for better Vietnamese coverage
-  tgt_vocab_size: 40000
+  tokenization: "word" # Word-level (no BPE)
+  src_vocab_size: 32000
+  tgt_vocab_size: 32000
   min_freq: 2
 
 # Model - Standard Transformer Base
 model:
-  d_model: 512
-  n_heads: 8
-  n_encoder_layers: 6
-  n_decoder_layers: 6
-  d_ff: 2048
+  d_model: 128
+  n_heads: 4
+  n_encoder_layers: 4
+  n_decoder_layers: 4
+  d_ff: 512 # 4x d_model
   dropout: 0.1
   max_seq_length: 512
+  use_xavier_init: false # No Xavier initialization (random init)
 
-# Training - Basic setup
+# Training - Baseline (NO optimizations)
 training:
   batch_size: 32
-  epochs: 5 # Reasonable training time
-  optimizer: "adam"
-  learning_rate: 0.0001
-  scheduler: "warmup"
+  epochs: 30
+  optimizer: "adam" # Basic Adam (not AdamW)
+  learning_rate: 0.0001 # Conservative learning rate
+  weight_decay: 0.01 # No weight decay
+  scheduler: "warmup" # Simple warmup (not cosine)
   warmup_steps: 4000
   label_smoothing: 0.0 # No label smoothing
+  gradient_accumulation_steps: 1 # No gradient accumulation
+  max_grad_norm: 5.0 # Higher clipping threshold
+  use_mixed_precision: false # No mixed precision (AMP)
 
   use_wandb: true
-  save_every: 20000
+  save_every: 10000
   eval_every: 500
   log_every: 100
 
@@ -72,5 +78,14 @@ wandb:
 # Version info
 version:
   name: "iwslt_v1_en2vi"
-  description: "IWSLT Baseline Transformer En→Vi with standard configuration"
-  notes: "No optimizations - serves as baseline for comparison on IWSLT dataset"
+  description: "IWSLT Baseline Transformer En→Vi - NO optimizations"
+  baseline_features:
+    - "Basic Adam optimizer (no AdamW)"
+    - "No mixed precision training"
+    - "No label smoothing"
+    - "Simple warmup scheduler (no cosine)"
+    - "Word-level tokenization (no BPE)"
+    - "No gradient accumulation"
+    - "Greedy decoding (no beam search)"
+    - "Small model (d_model=128, 4 layers)"
+  purpose: "Baseline model for comparison with optimized v2/v3"

@@ -246,7 +246,8 @@ def main():
         d_ff=model_config['d_ff'],
         dropout=model_config['dropout'],
         max_seq_length=model_config['max_seq_length'],
-        pad_idx=src_vocab.pad_idx
+        pad_idx=src_vocab.pad_idx,
+        use_xavier_init=model_config.get('use_xavier_init', True)
     )
     
     logger.info(get_model_summary(model))
