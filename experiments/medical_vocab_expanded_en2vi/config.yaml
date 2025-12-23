@@ -22,8 +22,8 @@ vocab:
 # Vocabulary Expansion (optional)
 vocab_expansion:
   enabled: true # Use same vocab as base model (BPE handles unknown words)
-  max_new_words_src: 10000
-  max_new_words_tgt: 10000
+  max_new_words_src: 5000
+  max_new_words_tgt: 5000
   min_freq: 2
 
 # Model Architecture (inherited from v2)
@@ -49,7 +49,7 @@ lora:
 training:
   resume_from: "experiments/iwslt_v2_en2vi/checkpoints/best_model.pt" # Pretrained checkpoint
   batch_size: 64
-  epochs: 10
+  epochs: 15
   optimizer: "adamw"
   learning_rate: 0.00002 # 2e-5 (optimized for full fine-tuning)
   weight_decay: 0.01
