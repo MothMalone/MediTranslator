@@ -1,0 +1,56 @@
+\documentclass[11pt]{article}
+
+% Change "review" to "final" to generate the final (sometimes called camera-ready) version.
+% Change to "preprint" to generate a non-anonymous version with page numbers.
+\usepackage[review]{acl}
+
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+
+% For proper rendering and hyphenation of words containing Latin characters (including in bib files)
+\usepackage[T1]{fontenc}
+% For Vietnamese characters support
+\usepackage[utf8]{inputenc}
+
+% Improves layout and saves space
+\usepackage{microtype}
+
+% Better typewriter font
+\usepackage{inconsolata}
+
+% For graphics and figures
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+% For better formatting
+\usepackage{hyperref}
+\usepackage{cleveref}
+
+\title{MediTranslator: A Transformer-based Neural Machine Translation System for English-Vietnamese Medical Texts}
+
+\author{Author Name \\
+  School of Information and Communication Technology \\
+  Vietnam National University, Hanoi \\
+  \texttt{email@vnu.edu.vn} \\}
+
+\begin{document}
+\maketitle
+
+\input{1.abstract}
+\input{2.intro}
+\input{3.background}
+\input{4.approach}
+\input{5.eval_method}
+\input{6.results}
+\input{7.related_work}
+\input{8.conclusion}
+
+\bibliography{references}
+
+\newpage
+\appendix
+\input{appendix}
+
+\end{document}

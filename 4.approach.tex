@@ -1,0 +1,192 @@
+\section{Approach}
+\label{sec:approach}
+
+This section describes the complete pipeline for developing the MediTranslator system, from data preprocessing to model training and fine-tuning.
+
+\subsection{Data Preparation}
+
+\subsubsection{Data Sources}
+
+The project leverages multiple publicly available parallel corpora:
+
+\begin{enumerate}
+    \item \textbf{IWSLT'15 English-Vietnamese Dataset}: A standard benchmark dataset for English-Vietnamese translation containing approximately 133K parallel sentences from TED talks.
+    
+    \item \textbf{OPUS-100 Dataset}: A multilingual dataset containing parallel corpora in 100 language pairs, providing diverse training examples.
+    
+    \item \textbf{Medical Domain Corpus}: Domain-specific medical texts curated from healthcare literature and professional translations.
+\end{enumerate}
+
+\subsubsection{Preprocessing Pipeline}
+
+The data preprocessing pipeline includes:
+
+\begin{enumerate}
+    \item \textbf{Text Cleaning}: Remove special characters, normalize whitespace, and handle encoding issues.
+    
+    \item \textbf{Language Detection}: Filter out misaligned sentences using language detection libraries.
+    
+    \item \textbf{Sentence Segmentation}: Split documents into individual sentences for training.
+    
+    \item \textbf{Tokenization}: Apply language-specific tokenizers (English: standard word tokenization, Vietnamese: Vietnamese word segmentation).
+    
+    \item \textbf{BPE Encoding}: Apply Byte-Pair Encoding (BPE) to handle rare words and improve generalization.
+\end{enumerate}
+
+\subsubsection{Vocabulary Building}
+
+The BPE tokenizer is trained on the concatenated source and target language data to create a shared vocabulary. The vocabulary size is set to 32,000 tokens, providing a good balance between vocabulary coverage and model size.
+
+Training data statistics:
+\begin{itemize}
+    \item IWSLT'15: $\sim$133K sentences
+    \item OPUS-100: $\sim$1M sentences
+    \item Medical domain: $\sim$10K sentences (reserved for fine-tuning)
+\end{itemize}
+
+\subsection{Model Architecture}
+
+The implementation includes a complete from-scratch Transformer architecture with the following components:
+
+\subsubsection{Encoder}
+
+The encoder consists of a stack of $N$ identical layers. Each layer includes:
+\begin{enumerate}
+    \item Multi-head self-attention mechanism (8 heads)
+    \item Layer normalization
+    \item Position-wise feed-forward network (intermediate dimension: 2048)
+\end{enumerate}
+
+Standard configuration: 6 layers for Base model, 12 layers for Large model.
+
+\subsubsection{Decoder}
+
+The decoder has a similar structure to the encoder but with an additional masked multi-head attention mechanism that prevents attention to future positions. This ensures autoregressive generation during decoding.
+
+Each decoder layer includes:
+\begin{enumerate}
+    \item Masked multi-head self-attention
+    \item Cross-attention (attending to encoder outputs)
+    \item Layer normalization
+    \item Position-wise feed-forward network
+\end{enumerate}
+
+\subsubsection{Output Layer}
+
+The final decoder layer is followed by a linear projection layer that maps the decoder hidden state to vocabulary probabilities, followed by a softmax operation for token selection.
+
+\subsection{Training Configuration}
+
+\subsubsection{Baseline Training}
+
+Baseline models are trained with the following configuration:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Hyperparameter} & \textbf{Value} \\
+\hline
+Model Dimension ($d_{model}$) & 512 \\
+Feed-Forward Dimension & 2048 \\
+Number of Heads & 8 \\
+Number of Layers & 6 \\
+Dropout Rate & 0.1 \\
+Batch Size & 64 \\
+Optimizer & Adam \\
+Learning Rate & $5 \times 10^{-4}$ \\
+Label Smoothing & 0.1 \\
+Max Epochs & 100 \\
+Evaluation Frequency & Every epoch \\
+\hline
+\end{tabular}
+\caption{Baseline training hyperparameters}
+\end{table}
+
+The learning rate is scheduled using a warmup strategy followed by decay:
+
+\begin{equation}
+\text{lr} = d_{model}^{-0.5} \cdot \min(\text{step}^{-0.5}, \text{step} \cdot \text{warmup\_steps}^{-1.5})
+\end{equation}
+
+\subsubsection{Loss Function}
+
+Cross-entropy loss with label smoothing is used to improve model generalization:
+
+\begin{equation}
+L_{LS} = (1 - \epsilon)L_{CE} + \epsilon L_{uniform}
+\end{equation}
+
+where $\epsilon = 0.1$ is the smoothing factor, $L_{CE}$ is the standard cross-entropy loss, and $L_{uniform}$ represents the uniform distribution over all tokens.
+
+\subsection{Decoding Strategies}
+
+\subsubsection{Greedy Decoding}
+
+During baseline training, greedy decoding is used: at each step, select the token with the highest probability. This is fast but may produce suboptimal translations.
+
+\subsubsection{Beam Search}
+
+For improved translation quality, beam search maintains $k$ (typically 4 or 5) most likely hypotheses at each decoding step. Length normalization is applied to prevent the model from favoring shorter translations:
+
+\begin{equation}
+\text{score} = \frac{\log P(y)}{|y|^{\alpha}}
+\end{equation}
+
+where $\alpha = 0.6$ and $|y|$ is the length of the hypothesis.
+
+\subsection{Medical Domain Fine-Tuning}
+
+Two fine-tuning approaches are implemented and compared:
+
+\subsubsection{Full Fine-Tuning}
+
+The complete pre-trained model is fine-tuned on the medical domain dataset. This approach:
+\begin{itemize}
+    \item Updates all model parameters
+    \item Requires lower learning rate ($1 \times 10^{-5}$) to prevent catastrophic forgetting
+    \item Uses smaller batch size (16-32) due to limited domain data
+    \item Employs early stopping to prevent overfitting
+\end{itemize}
+
+\subsubsection{LoRA Fine-Tuning}
+
+Low-Rank Adaptation is applied to both attention modules and feed-forward networks:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Parameter} & \textbf{Value} \\
+\hline
+LoRA Rank & 16 \\
+LoRA Alpha & 32 \\
+Trainable Modules & Attention + FFN \\
+Initialization & Gaussian \\
+Training Epochs & 50 \\
+Learning Rate & $5 \times 10^{-4}$ \\
+\hline
+\end{tabular}
+\caption{LoRA fine-tuning configuration}
+\end{table}
+
+This approach reduces trainable parameters from 88M (full model) to approximately 1.3M, significantly reducing computational requirements while maintaining strong performance.
+
+\subsection{Implementation Details}
+
+\subsubsection{Framework and Libraries}
+
+\begin{itemize}
+    \item \textbf{Core Framework}: PyTorch for neural network implementation
+    \item \textbf{Tokenization}: SentencePiece for BPE encoding
+    \item \textbf{Monitoring}: Weights \& Biases (W\&B) for experiment tracking and logging
+    \item \textbf{Device Support}: CUDA for GPU acceleration, CPU fallback support, MPS (Metal Performance Shaders) for Apple Silicon
+\end{itemize}
+
+\subsubsection{Distributed Training}
+
+For larger experiments, distributed data parallelism is implemented using PyTorch's DistributedDataParallel module, enabling training across multiple GPUs.
+
+\subsubsection{Checkpointing}
+
+Models are checkpointed every epoch based on validation performance. The best model (lowest validation loss) is saved and used for final evaluation.

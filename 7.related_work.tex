@@ -1,0 +1,141 @@
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Neural Machine Translation Systems}
+
+Neural Machine Translation has evolved significantly since the introduction of sequence-to-sequence models. Early NMT systems \cite{Sutskever2014, Cho2014} used RNN-based encoder-decoder architectures with attention mechanisms \cite{Bahdanau2015}. The introduction of the Transformer architecture \cite{Vaswani2017} replaced recurrent connections with self-attention, leading to faster training and better parallelization.
+
+Recent advances in NMT include:
+
+\begin{itemize}
+    \item \textbf{Larger Models and Scale}: Models with billions of parameters like mT5 \cite{Xue2021} and mBART \cite{Liu2020} have shown significant improvements in zero-shot and few-shot translation.
+    
+    \item \textbf{Multilingual Models}: Single models trained on multiple language pairs have been shown to improve translation quality across all pairs through knowledge sharing \cite{Johnson2017}.
+    
+    \item \textbf{Back-Translation}: Synthetic data generation through back-translation has become standard practice for improving NMT systems \cite{Sennrich2016}.
+    
+    \item \textbf{Data Filtering and Selection}: Techniques for selecting high-quality training data and filtering out noisy examples \cite{Wang2018} improve downstream translation quality.
+\end{itemize}
+
+\subsection{Domain Adaptation for Machine Translation}
+
+Domain adaptation addresses the significant performance drop of NMT systems when applied to new domains. Approaches include:
+
+\subsubsection{Fine-Tuning Based Methods}
+
+Traditional domain adaptation relies on fine-tuning the entire model on in-domain data. While effective, this approach requires significant computational resources and can suffer from catastrophic forgetting of general knowledge.
+
+\subsubsection{Parameter-Efficient Fine-Tuning}
+
+Recent work has focused on methods that update only a small number of parameters:
+
+\begin{itemize}
+    \item \textbf{Adapter Modules}: \cite{Houlsby2019} proposed compact adapter modules inserted between layers, requiring only 3-4\% of parameters.
+    
+    \item \textbf{Low-Rank Adaptation (LoRA)}: \cite{Hu2021} showed that low-rank updates can match full fine-tuning performance with 100x fewer parameters, enabling efficient domain adaptation.
+    
+    \item \textbf{Prompt-Based Methods}: \cite{Qin2021} explored learnable prompts for domain adaptation without modifying model weights.
+\end{itemize}
+
+\subsection{Medical Translation}
+
+Medical translation presents unique challenges due to:
+
+\begin{itemize}
+    \item \textbf{Specialized Terminology}: Medical texts contain domain-specific vocabulary not well-represented in general language data.
+    
+    \item \textbf{Safety-Critical Accuracy}: Translation errors in medical contexts can have serious consequences, requiring extremely high accuracy.
+    
+    \item \textbf{Data Scarcity}: Parallel medical texts are less abundant than general domain data due to privacy and proprietary concerns.
+\end{itemize}
+
+Recent work on medical translation includes:
+
+\begin{itemize}
+    \item \cite{Savery2020} developed specialized medical NMT systems for English-Spanish and English-Chinese translation.
+    
+    \item \cite{Navigli2021} created Nasari, a medical knowledge base for multilingual medical concept alignment.
+    
+    \item \cite{Zhang2021} applied domain-aware pre-training for medical translation, improving BLEU scores significantly.
+\end{itemize}
+
+\subsection{English-Vietnamese Translation}
+
+The English-Vietnamese language pair has received less attention than widely-spoken pairs like English-German or English-Chinese. Existing work includes:
+
+\begin{itemize}
+    \item \textbf{IWSLT Shared Tasks}: The International Workshop on Spoken Language Translation includes English-Vietnamese as a standard evaluation pair, providing benchmark datasets and comparative results.
+    
+    \item \cite{Crego2016} developed a hybrid system combining statistical and neural approaches for English-Vietnamese translation.
+    
+    \item \cite{Koehn2018} analyzed challenges specific to the English-Vietnamese pair, including word order differences and morphological complexity.
+\end{itemize}
+
+Recent Vietnamese NLP work has focused on:
+
+\begin{itemize}
+    \item \textbf{Word Segmentation}: Proper Vietnamese word segmentation is critical for tokenization \cite{Vu2007, Tran2015}.
+    
+    \item \textbf{Morphological Processors}: Handling Vietnamese-specific linguistic features like tone marks and particles \cite{Nguyen2006}.
+    
+    \item \textbf{Monolingual Resources}: Development of Vietnamese-specific pre-trained models and resources \cite{Nguyen2021}.
+\end{itemize}
+
+\subsection{Evaluation Metrics for Machine Translation}
+
+While BLEU remains the standard metric, recent work has proposed alternatives:
+
+\begin{itemize}
+    \item \textbf{TER (Translation Edit Rate)}: \cite{Snover2006} measures the number of edits needed to transform output into reference.
+    
+    \item \textbf{METEOR}: \cite{Banerjee2005} extends BLEU by considering synonyms and morphological variants.
+    
+    \item \textbf{ChrF}: \cite{Popovic2015} character-level F-score, particularly useful for morphologically rich languages.
+    
+    \item \textbf{BERTScore}: \cite{Zhang2020} uses contextual embeddings for more semantic evaluation.
+    
+    \item \textbf{coMETic}: \cite{Rei2021} learned metric that correlates better with human judgment than BLEU.
+\end{itemize}
+
+For medical translation, human evaluation is often preferred due to the critical nature of accuracy requirements in healthcare.
+
+\subsection{Knowledge Distillation in NMT}
+
+Knowledge distillation has been applied to NMT for model compression:
+
+\begin{itemize}
+    \item \cite{Kim2016} demonstrated that smaller student models can learn from larger teacher models, enabling deployment of lightweight systems.
+    
+    \item \cite{Junczys-Dowmunt2016} applied sequence-level knowledge distillation for multilingual NMT.
+\end{itemize}
+
+This work relates to our LoRA fine-tuning approach, which can be viewed as parameter-efficient knowledge adaptation without full model retraining.
+
+\subsection{Comparison with Related Systems}
+
+The MediTranslator system relates to several existing systems:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\hline
+\textbf{System} & \textbf{Language Pair} & \textbf{Domain} & \textbf{Approach} \\
+\hline
+Google Translate & 100+ pairs & General & Multilingual \\
+Microsoft Translator & 70+ pairs & General & Multilingual \\
+Marian NMT & 1000+ pairs & General & Transformer \\
+JHUQ & En-Vi & General & Hybrid \\
+MediTranslator & En-Vi & Medical & Transformer + LoRA \\
+\hline
+\end{tabular}
+\caption{Comparison of neural machine translation systems}
+\end{table}
+
+MediTranslator differentiates itself through:
+
+\begin{enumerate}
+    \item \textbf{Domain Focus}: Specialized for medical domain rather than general translation
+    \item \textbf{Efficient Fine-Tuning}: LoRA-based domain adaptation for resource-constrained environments
+    \item \textbf{Educational Value}: Complete from-scratch implementation demonstrating modern NMT techniques
+    \item \textbf{Transparency}: Open-source implementation enabling reproducibility and further research
+\end{enumerate}

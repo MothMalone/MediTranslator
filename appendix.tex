@@ -1,0 +1,203 @@
+\appendix
+
+\section{Implementation Details}
+\label{sec:appendix}
+
+\subsection{PyTorch Transformer Implementation}
+
+The core Transformer implementation in PyTorch follows this structure:
+
+\begin{enumerate}
+    \item \textbf{Embedding Layer}: Combines token embeddings with positional encodings
+    \item \textbf{Multi-Head Attention}: Implements scaled dot-product attention with multiple heads
+    \item \textbf{Feed-Forward Network}: Two-layer feed-forward with ReLU activation
+    \item \textbf{Encoder Stack}: Stack of encoder layers with residual connections and layer normalization
+    \item \textbf{Decoder Stack}: Similar to encoder but with masked self-attention and cross-attention
+    \item \textbf{Output Projection}: Linear layer mapping decoder states to vocabulary
+\end{enumerate}
+
+Key design patterns:
+
+\begin{itemize}
+    \item Pre-Layer Normalization: Normalization applied before each sub-layer for better stability
+    \item Residual Connections: All sub-layers have skip connections
+    \item Dropout Regularization: Applied after attention weights and FFN activations
+\end{itemize}
+
+\subsection{Data Preprocessing Scripts}
+
+Available scripts for data processing:
+
+\begin{itemize}
+    \item \texttt{download\_iwslt.py}: Downloads IWSLT'15 English-Vietnamese dataset
+    \item \texttt{download\_opus100.py}: Downloads relevant language pairs from OPUS-100
+    \item \texttt{train\_bpe.py}: Trains BPE tokenizer on combined corpus
+    \item \texttt{check\_data.py}: Validates data quality and statistics
+\end{itemize}
+
+\subsection{Training Infrastructure}
+
+\subsubsection{Configuration Management}
+
+Experiment configurations are stored in YAML format with the following structure:
+
+\begin{enumerate}
+    \item \textbf{Model Config}: Architecture parameters (dimensions, layers, heads)
+    \item \textbf{Data Config}: Data paths, vocabulary size, batch size
+    \item \textbf{Training Config}: Learning rate, optimizer, regularization
+    \item \textbf{Evaluation Config}: Metrics, evaluation frequency, early stopping patience
+\end{enumerate}
+
+\subsubsection{Logging and Monitoring}
+
+Weights \& Biases (W\&B) integration provides:
+
+\begin{itemize}
+    \item Real-time training and validation metrics visualization
+    \item Hyperparameter tracking and experiment comparison
+    \item Model checkpointing and artifact management
+    \item Team collaboration and results sharing
+\end{itemize}
+
+\subsection{Inference Pipeline}
+
+\subsubsection{Beam Search Implementation}
+
+The beam search decoder maintains a priority queue of hypotheses:
+
+\begin{enumerate}
+    \item Initialize with start-of-sequence token
+    \item For each time step, expand current hypotheses by generating next tokens
+    \item Keep only top-k hypotheses by score
+    \item Repeat until all hypotheses reach end-of-sequence or maximum length
+    \item Apply length normalization and select best hypothesis
+\end{enumerate}
+
+\subsubsection{Interactive Translation}
+
+The \texttt{translate.py} script provides an interactive interface:
+
+\begin{enumerate}
+    \item Load trained checkpoint
+    \item Accept user input sentences
+    \item Preprocess input (tokenization, encoding)
+    \item Generate translation using beam search
+    \item Post-process output (BPE merging, detokenization)
+    \item Display translation to user
+\end{enumerate}
+
+\subsection{Evaluation Scripts}
+
+\subsubsection{BLEU Calculation}
+
+Implementation of corpus-level BLEU:
+
+\begin{enumerate}
+    \item Tokenize reference and hypothesis
+    \item Count n-gram matches (typically up to 4-grams)
+    \item Compute brevity penalty for length mismatch
+    \item Aggregate scores across entire corpus
+\end{enumerate}
+
+\subsubsection{Domain-Specific Metrics}
+
+Custom evaluation script for medical terminology:
+
+\begin{enumerate}
+    \item Load medical terminology dictionary
+    \item For each translation, identify medical terms in source
+    \item Check if medical terms are correctly translated in output
+    \item Compute accuracy as fraction of correctly translated terms
+\end{enumerate}
+
+\subsection{Hardware and Runtime}
+
+\subsubsection{GPU Specifications}
+
+Training experiments are conducted on:
+
+\begin{itemize}
+    \item NVIDIA Tesla V100 (16GB memory)
+    \item Apple M1 Pro with Metal Performance Shaders (MPS)
+    \item Multi-GPU setups using PyTorch DistributedDataParallel
+\end{itemize}
+
+\subsubsection{Runtime Estimates}
+
+Approximate training times for single GPU:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\hline
+\textbf{Model} & \textbf{Dataset} & \textbf{Training Time (1 GPU)} \\
+\hline
+Transformer Base & IWSLT'15 (133K) & 8 hours (100 epochs) \\
+Transformer Large & IWSLT'15 (133K) & 20 hours (100 epochs) \\
+Base + LoRA FT & Medical (10K) & 1.5 hours (50 epochs) \\
+\hline
+\end{tabular}
+\caption{Approximate training times}
+\end{table}
+
+\subsection{Reproducibility}
+
+For reproducibility, we provide:
+
+\begin{enumerate}
+    \item Fixed random seeds in PyTorch and NumPy
+    \item Deterministic CUDA operations
+    \item Complete configuration files for all experiments
+    \item Pre-trained checkpoint files
+    \item Docker container with dependencies
+\end{enumerate}
+
+\subsection{Code Organization}
+
+Main modules:
+
+\begin{itemize}
+    \item \texttt{src/models/}: Transformer architecture implementation
+    \item \texttt{src/data/}: Data loading, tokenization, vocabulary
+    \item \texttt{src/training/}: Training loops, optimization, metrics
+    \item \texttt{src/inference/}: Decoding strategies, translation
+    \item \texttt{src/evaluation/}: BLEU and custom metrics
+    \item \texttt{scripts/}: User-facing scripts for training, translation, evaluation
+    \item \texttt{experiments/}: Configuration files for different experiments
+\end{itemize}
+
+\subsection{Dependencies}
+
+Key dependencies:
+
+\begin{itemize}
+    \item PyTorch 2.0+
+    \item SentencePiece (BPE tokenization)
+    \item NumPy, Pandas (data processing)
+    \item tqdm (progress bars)
+    \item wandb (experiment tracking)
+    \item sacrebleu (BLEU evaluation)
+\end{itemize}
+
+See \texttt{requirements.txt} for complete dependency list with versions.
+
+\subsection{Hyperparameter Search Space}
+
+For future hyperparameter optimization, the following ranges are recommended:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\hline
+\textbf{Hyperparameter} & \textbf{Min} & \textbf{Max} \\
+\hline
+Learning Rate & $1 \times 10^{-5}$ & $1 \times 10^{-3}$ \\
+Dropout & 0.0 & 0.3 \\
+Label Smoothing & 0.0 & 0.2 \\
+Batch Size & 16 & 128 \\
+Model Dimension & 256 & 1024 \\
+FFN Dimension & 512 & 4096 \\
+\hline
+\end{tabular}
+\caption{Hyperparameter search space}
+\end{table}

@@ -1,0 +1,23 @@
+\section{Introduction}
+
+Neural Machine Translation (NMT) has become the dominant paradigm for automated translation tasks, with Transformer-based models achieving state-of-the-art results across multiple language pairs. However, the application of NMT to specialized domains such as medical translation presents unique challenges due to: (1) the domain-specific vocabulary and terminology, (2) the critical importance of translation accuracy in healthcare contexts, and (3) the limited availability of domain-specific parallel corpora.
+
+This project aims to develop MediTranslator, a comprehensive English-Vietnamese neural machine translation system optimized for medical texts. The work encompasses the following key contributions:
+
+\subsection{Project Objectives}
+
+\begin{enumerate}
+    \item \textbf{From-Scratch Implementation}: Implement the Transformer architecture from first principles, including multi-head self-attention, positional encoding, and feed-forward networks, to demonstrate a deep understanding of modern NMT systems.
+    
+    \item \textbf{Data Pipeline Development}: Create a robust data preprocessing pipeline that handles multiple data sources (IWSLT'15, OPUS-100), implements BPE tokenization, and ensures data quality for model training.
+    
+    \item \textbf{Multi-Model Experimentation}: Train baseline models with various configurations (different model sizes, learning rates, optimization strategies) to identify the optimal setup for English-Vietnamese translation.
+    
+    \item \textbf{Medical Domain Adaptation}: Develop specialized techniques for medical domain fine-tuning, including both full fine-tuning and parameter-efficient LoRA methods, to improve translation of medical terminology.
+    
+    \item \textbf{Comprehensive Evaluation}: Implement multiple evaluation metrics (BLEU, domain-specific metrics) and provide detailed analysis of model performance across different text types.
+\end{enumerate}
+
+\subsection{Report Structure}
+
+The remainder of this report is organized as follows: Section \ref{sec:background} provides the theoretical background on neural machine translation and Transformer architecture. Section \ref{sec:approach} describes the system design, data preprocessing, model architecture, and training methodology. Section \ref{sec:eval} details the evaluation methods and metrics used. Section \ref{sec:results} presents the experimental results and analysis. Section \ref{sec:related} discusses related work in NMT and medical translation. Finally, Section \ref{sec:conclusion} concludes the report and discusses future work directions.

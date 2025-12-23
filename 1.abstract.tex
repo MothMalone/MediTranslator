@@ -1,0 +1,9 @@
+\begin{abstract}
+This report presents MediTranslator, a Transformer-based neural machine translation (NMT) system designed specifically for translating medical texts between English and Vietnamese. 
+
+The project implements the complete pipeline for developing a production-ready NMT system: (1) data collection and preprocessing from multiple sources including IWSLT'15 and OPUS-100 datasets, (2) vocabulary building with Byte-Pair Encoding (BPE) tokenization, (3) implementation of the Transformer architecture from scratch, (4) training baseline models with various configurations and optimization techniques, (5) medical domain fine-tuning using both full fine-tuning and parameter-efficient LoRA (Low-Rank Adaptation) methods, and (6) comprehensive evaluation using BLEU scores and domain-specific metrics.
+
+We explore multiple architectural variations, including standard Transformer Base (512 dimensions) and Transformer Big (1024 dimensions), and demonstrate the effectiveness of transfer learning and domain adaptation techniques for improving translation quality in the medical domain. Our results show that domain-specific fine-tuning significantly improves BLEU scores, with LoRA-based fine-tuning providing a more efficient alternative to full fine-tuning while maintaining comparable performance.
+
+The complete implementation, including data preprocessing scripts, model architecture, training loops, and evaluation metrics, is available in the repository, providing a comprehensive educational resource for understanding modern neural machine translation systems.
+\end{abstract}

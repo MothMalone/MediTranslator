@@ -1,0 +1,140 @@
+\section{Evaluation Methodology}
+\label{sec:eval}
+
+This section describes the evaluation methods and metrics used to assess the quality of the MediTranslator system.
+
+\subsection{Evaluation Metrics}
+
+\subsubsection{BLEU Score}
+
+BLEU (Bilingual Evaluation Understudy) is the primary metric used for evaluation. BLEU measures the n-gram overlap between machine-generated and human reference translations. The metric is computed as:
+
+\begin{equation}
+BLEU = BP \cdot \exp\left(\sum_{n=1}^{4} \frac{1}{4}\log p_n\right)
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $BP$ is the brevity penalty: $BP = e^{1 - r/c}$ for reference length $r$ and candidate length $c$
+    \item $p_n$ is the precision for n-grams of size $n$ (typically computed up to 4-grams)
+\end{itemize}
+
+BLEU is computed using standard tokenization and case-sensitive matching.
+
+\subsubsection{BLEU Variants}
+
+For comprehensive evaluation, multiple BLEU variants are computed:
+
+\begin{enumerate}
+    \item \textbf{Token-level BLEU}: Standard BLEU with word tokenization
+    \item \textbf{Sentence-level BLEU}: Average of per-sentence BLEU scores
+    \item \textbf{Sacrableu}: BLEU computed using the SacraBLEU library for consistent evaluation across different tools
+\end{enumerate}
+
+\subsubsection{Limitations of BLEU}
+
+While BLEU is widely used for NMT evaluation, it has known limitations:
+
+\begin{itemize}
+    \item Does not capture semantic equivalence (paraphrases with different wording receive lower scores)
+    \item Highly dependent on reference quality and number of references
+    \item Correlates only moderately with human judgments for some language pairs
+    \item Particularly weak for morphologically rich languages like Vietnamese
+\end{itemize}
+
+\subsection{Domain-Specific Evaluation}
+
+For medical domain evaluation, additional metrics are employed:
+
+\subsubsection{Medical Terminology Accuracy}
+
+A curated list of common medical terms is maintained, and the accuracy of translating these terms is evaluated separately:
+
+\begin{equation}
+\text{Medical Terminology Accuracy} = \frac{\text{Correctly translated medical terms}}{\text{Total medical terms}}
+\end{equation}
+
+\subsubsection{Domain Relevance}
+
+Translation quality is assessed by subject matter experts for medical domain-specific translations. While subjective, this evaluation provides insights into practical usability.
+
+\subsection{Evaluation Datasets}
+
+\subsubsection{Test Set Composition}
+
+Test sets are carefully constructed to evaluate different aspects:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\hline
+\textbf{Dataset} & \textbf{Size} & \textbf{Purpose} \\
+\hline
+IWSLT'15 Test Set & 1,268 sentences & General domain baseline \\
+IWSLT'15 Dev Set & 1,553 sentences & Hyperparameter tuning \\
+Medical Test Set & 500 sentences & Domain-specific evaluation \\
+Mixed Test Set & 1,000 sentences & Cross-domain robustness \\
+\hline
+\end{tabular}
+\caption{Test set composition}
+\end{table}
+
+\subsubsection{Test Set Properties}
+
+Test sets are analyzed for the following properties:
+
+\begin{itemize}
+    \item \textbf{Sentence Length Distribution}: Evaluation on sentences of varying lengths to assess length bias
+    \item \textbf{Vocabulary Coverage}: Analysis of out-of-vocabulary (OOV) rates for different test sets
+    \item \textbf{Domain Distribution}: Percentage of medical terminology in each test set
+\end{itemize}
+
+\subsection{Evaluation Protocol}
+
+\subsubsection{Training/Validation Split}
+
+For model development:
+\begin{itemize}
+    \item Training Set: 90\% of available data
+    \item Validation Set: 5\% for hyperparameter tuning
+    \item Test Set: 5\% (held out from training)
+\end{itemize}
+
+\subsubsection{Cross-Validation}
+
+For small medical domain datasets, 5-fold cross-validation is employed to ensure robust evaluation with limited data.
+
+\subsubsection{Statistical Significance Testing}
+
+For comparing different models, bootstrap resampling is used to compute 95\% confidence intervals around BLEU scores, allowing assessment of statistical significance.
+
+\subsection{Ablation Studies}
+
+To understand the contribution of different components, ablation studies are conducted by:
+
+\begin{enumerate}
+    \item \textbf{Architecture Variations}: Training with different numbers of layers and attention heads
+    \item \textbf{Hyperparameter Sensitivity}: Evaluating impact of learning rate, dropout rate, and batch size
+    \item \textbf{Data Size}: Measuring performance with different training data sizes
+    \item \textbf{Fine-Tuning Approaches}: Comparing full fine-tuning vs. LoRA vs. no fine-tuning
+\end{enumerate}
+
+\subsection{Qualitative Analysis}
+
+Beyond automatic metrics, qualitative analysis is performed by:
+
+\begin{enumerate}
+    \item \textbf{Case Study Analysis}: Examining specific challenging translations
+    \item \textbf{Error Analysis}: Categorizing errors (alignment, reordering, lexical, grammatical, idiom)
+    \item \textbf{Human Evaluation}: Assessing 100 randomly selected translations for adequacy and fluency
+\end{enumerate}
+
+Error categories are defined as:
+
+\begin{itemize}
+    \item \textbf{Lexical Errors}: Incorrect word choice or untranslated words
+    \item \textbf{Reordering Errors}: Incorrect word order in translation
+    \item \textbf{Grammatical Errors}: Incorrect verb tense, agreement, or grammatical structure
+    \item \textbf{Missing Words}: Content words present in source but absent in translation
+    \item \textbf{Extra Words}: Words in translation not present in source
+\end{itemize}

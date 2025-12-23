@@ -1,0 +1,94 @@
+\section{Background}
+\label{sec:background}
+
+\subsection{Neural Machine Translation}
+
+Neural Machine Translation (NMT) represents a paradigm shift from phrase-based statistical machine translation to end-to-end neural approaches. Rather than manually crafting translation rules, NMT systems learn to translate by optimizing a neural network on large parallel corpora.
+
+The encoder-decoder architecture, first introduced by \citet{Sutskever2014} for sequence-to-sequence learning, forms the foundation of modern NMT systems. In this architecture:
+\begin{itemize}
+    \item The \textbf{encoder} processes the source language sentence word-by-word and produces a context vector representation.
+    \item The \textbf{decoder} uses this context vector to generate the target language sentence word-by-word.
+    \item An \textbf{attention mechanism} allows the decoder to selectively focus on different parts of the source sentence when generating each target word.
+\end{itemize}
+
+\subsection{The Transformer Architecture}
+
+The introduction of the Transformer architecture by \citet{Vaswani2017} revolutionized NMT by replacing recurrent neural networks (RNNs) with self-attention mechanisms. The key innovations include:
+
+\subsubsection{Multi-Head Self-Attention}
+
+Self-attention allows each position in the sequence to directly attend to all other positions. The attention mechanism is computed as:
+
+\begin{equation}
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+\end{equation}
+
+where $Q$ (queries), $K$ (keys), and $V$ (values) are linear projections of the input. Multi-head attention runs multiple attention mechanisms in parallel:
+
+\begin{equation}
+\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)W^O
+\end{equation}
+
+\subsubsection{Positional Encoding}
+
+Since the Transformer has no inherent understanding of sequence order, positional encodings are added to the embedding layer:
+
+\begin{equation}
+PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i/d_{model}}}\right)
+\end{equation}
+
+\begin{equation}
+PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i/d_{model}}}\right)
+\end{equation}
+
+\subsubsection{Feed-Forward Networks}
+
+Each position in each layer is passed through an identical feed-forward network:
+
+\begin{equation}
+\text{FFN}(x) = \max(0, xW_1 + b_1)W_2 + b_2
+\end{equation}
+
+\subsection{Domain Adaptation in NMT}
+
+Domain adaptation addresses the challenge of applying models trained on general data to specialized domains. Two primary approaches are employed in this project:
+
+\subsubsection{Full Fine-Tuning}
+
+Fine-tuning involves training the entire pre-trained model on a domain-specific dataset. While this approach can achieve excellent results, it requires significant computational resources and risks overfitting on small medical datasets.
+
+\subsubsection{Low-Rank Adaptation (LoRA)}
+
+LoRA \citep{Hu2021} provides a parameter-efficient alternative to full fine-tuning. Instead of updating all weights, LoRA adds learnable low-rank matrices to existing weight matrices:
+
+\begin{equation}
+W' = W + \Delta W = W + BA
+\end{equation}
+
+where $W$ is the original weight matrix, and $B$ and $A$ are the low-rank update matrices with rank $r \ll \min(m, n)$. This reduces the number of trainable parameters from millions to thousands while maintaining competitive performance.
+
+\subsection{Evaluation Metrics}
+
+\subsubsection{BLEU Score}
+
+BLEU (Bilingual Evaluation Understudy) measures the overlap between machine-generated translations and reference translations. It computes the geometric mean of n-gram precisions:
+
+\begin{equation}
+BLEU = BP \cdot \exp\left(\sum_{n=1}^{N} w_n \log p_n\right)
+\end{equation}
+
+where $BP$ is the brevity penalty, $p_n$ is the precision for n-grams of size $n$, and $w_n$ are weights.
+
+Despite its limitations, BLEU remains the standard metric for comparing NMT systems and provides a consistent way to measure translation quality across different approaches.
+
+\subsection{English-Vietnamese Translation Challenges}
+
+The language pair English-Vietnamese presents specific challenges:
+
+\begin{itemize}
+    \item \textbf{Linguistic Distance}: English is a fusional language with complex morphology, while Vietnamese is an analytic language with separate words for grammatical functions.
+    \item \textbf{Word Order}: English relies on word order for grammar, while Vietnamese uses more flexible word order with reliance on particles and context.
+    \item \textbf{Vocabulary}: Vietnamese uses diacritical marks (tone marks) that are critical for meaning, requiring careful handling in tokenization.
+    \item \textbf{Medical Terminology}: Medical texts introduce specialized vocabulary that may not be well-represented in general domain training data.
+\end{itemize}
