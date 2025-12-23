@@ -43,13 +43,24 @@ class SentencePieceVocab:
         self.bos_idx = self.sp.bos_id()  # Should be 2
         self.eos_idx = self.sp.eos_id()  # Should be 3
         
-        logger.info(f"Loaded SentencePiece model: {model_path}")
-        logger.info(f"  Vocab size: {len(self)}")
+        # Check if expanded vocab file exists
+        # When vocab is expanded, .vocab file has more tokens than .model
+        vocab_path = model_path.replace('.model', '.vocab')
+        if os.path.exists(vocab_path):
+            with open(vocab_path, 'r', encoding='utf-8') as f:
+                self._vocab_size = sum(1 for _ in f)
+            logger.info(f"Loaded SentencePiece model: {model_path}")
+            logger.info(f"  Vocab size from .vocab file: {self._vocab_size}")
+        else:
+            self._vocab_size = self.sp.GetPieceSize()
+            logger.info(f"Loaded SentencePiece model: {model_path}")
+            logger.info(f"  Vocab size from .model: {self._vocab_size}")
+        
         logger.info(f"  Special tokens: PAD={self.pad_idx}, UNK={self.unk_idx}, BOS={self.bos_idx}, EOS={self.eos_idx}")
     
     def __len__(self) -> int:
-        """Return vocabulary size."""
-        return self.sp.GetPieceSize()
+        """Return vocabulary size (from .vocab file if expanded, else from .model)."""
+        return self._vocab_size
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
         """
@@ -88,7 +99,17 @@ class SentencePieceVocab:
             special_ids = {self.pad_idx, self.unk_idx, self.bos_idx, self.eos_idx}
             ids = [i for i in ids if i not in special_ids]
         
-        return self.sp.DecodeIds(ids)
+        text = self.sp.DecodeIds(ids)
+        
+        # Post-processing: decode HTML entities and fix formatting
+        import html
+        text = html.unescape(text)  # &apos; → ', &quot; → ", etc.
+        
+        # Capitalize first letter if it's lowercase
+        if text and text[0].islower():
+            text = text[0].upper() + text[1:]
+        
+        return text
     
     def encode_as_pieces(self, text: str) -> List[str]:
         """

@@ -22,13 +22,14 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.models.transformer import Transformer
-from src.models.lora import apply_lora_to_model, get_lora_parameters, merge_lora_weights
+from src.models.lora import apply_lora_to_model, get_lora_parameters, merge_lora_weights, mark_only_lora_as_trainable
 from src.data.vocabulary import Vocabulary
 from src.data.dataset import TranslationDataset, create_dataloader
 from src.training.trainer import Trainer
 from src.utils.config import load_config
 from src.utils.logger import setup_logger
 from src.utils.helpers import set_seed, get_device
+from src.utils.embedding_resize import resize_token_embeddings, print_embedding_info
 
 
 class DiscriminativeLROptimizer:
@@ -161,12 +162,22 @@ def load_pretrained_model_with_lora(config, device):
     
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Load vocabularies
+    # Load vocabularies (BPE or word-level)
     vocab_dir = config['paths']['vocab_dir']
-    src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
-    tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
+    vocab_config = config.get('vocab', {})
+    use_bpe = vocab_config.get('tokenization') == 'bpe'
     
-    logger.info(f"Loaded vocabularies: src={len(src_vocab)}, tgt={len(tgt_vocab)}")
+    if use_bpe:
+        # Load SentencePiece BPE models
+        from src.data.sp_vocab import SentencePieceVocab
+        src_vocab = SentencePieceVocab(os.path.join(vocab_dir, 'src.model'))
+        tgt_vocab = SentencePieceVocab(os.path.join(vocab_dir, 'tgt.model'))
+        logger.info(f"Loaded BPE vocabularies: src={len(src_vocab)}, tgt={len(tgt_vocab)}")
+    else:
+        # Load word-level JSON vocabs
+        src_vocab = Vocabulary.load(os.path.join(vocab_dir, 'src_vocab.json'))
+        tgt_vocab = Vocabulary.load(os.path.join(vocab_dir, 'tgt_vocab.json'))
+        logger.info(f"Loaded vocabularies: src={len(src_vocab)}, tgt={len(tgt_vocab)}")
     
     # Create model
     model_config = config['model']
@@ -184,8 +195,50 @@ def load_pretrained_model_with_lora(config, device):
     )
     
     # Load pretrained weights
-    model.load_state_dict(checkpoint['model_state_dict'])
-    logger.info("✓ Loaded pretrained weights")
+    checkpoint_state = checkpoint['model_state_dict']
+    pretrained_src_vocab_size = None
+    pretrained_tgt_vocab_size = None
+    
+    # Detect pretrained vocab sizes from checkpoint
+    for key in checkpoint_state.keys():
+        if 'src_embedding.embedding.weight' in key:
+            pretrained_src_vocab_size = checkpoint_state[key].shape[0]
+        if 'tgt_embedding.embedding.weight' in key:
+            pretrained_tgt_vocab_size = checkpoint_state[key].shape[0]
+    
+    # Check if vocabulary has been expanded
+    vocab_expanded = (len(src_vocab) > pretrained_src_vocab_size or 
+                      len(tgt_vocab) > pretrained_tgt_vocab_size)
+    
+    if vocab_expanded:
+        logger.info("=" * 80)
+        logger.info("VOCABULARY EXPANSION DETECTED")
+        logger.info("=" * 80)
+        logger.info(f"Pretrained vocab: src={pretrained_src_vocab_size}, tgt={pretrained_tgt_vocab_size}")
+        logger.info(f"Current vocab:    src={len(src_vocab)}, tgt={len(tgt_vocab)}")
+        logger.info(f"Expansion:        src=+{len(src_vocab)-pretrained_src_vocab_size}, tgt=+{len(tgt_vocab)-pretrained_tgt_vocab_size}")
+        
+        # Load weights with strict=False to allow size mismatch
+        missing_keys, unexpected_keys = model.load_state_dict(checkpoint_state, strict=False)
+        logger.info("✓ Loaded pretrained weights (with embedding size mismatch)")
+        
+        # Resize embeddings to match expanded vocabulary
+        logger.info("\nResizing model embeddings for expanded vocabulary...")
+        model = resize_token_embeddings(
+            model,
+            new_vocab_size=len(tgt_vocab),
+            old_vocab_size=pretrained_tgt_vocab_size,
+            pad_idx=src_vocab.pad_idx
+        )
+        logger.info("✓ Embeddings resized successfully")
+        
+        # Show embedding info
+        print_embedding_info(model)
+        logger.info("=" * 80)
+    else:
+        # Standard loading - vocab sizes match
+        model.load_state_dict(checkpoint_state)
+        logger.info("✓ Loaded pretrained weights")
     
     # Apply LoRA
     lora_config = config.get('lora', {})
@@ -200,11 +253,19 @@ def load_pretrained_model_with_lora(config, device):
         )
         logger.info(f"✓ Applied LoRA to {lora_count} layers")
         
+        # Freeze base model, only train LoRA parameters
+        mark_only_lora_as_trainable(model)
+        logger.info("✓ Froze base model parameters, only LoRA weights are trainable")
+        
         # Count trainable vs total parameters
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         logger.info(f"Total parameters: {total_params:,}")
         logger.info(f"Trainable parameters: {trainable_params:,} ({100*trainable_params/total_params:.2f}%)")
+        
+        # Debug: Show which params are trainable
+        trainable_names = [name for name, p in model.named_parameters() if p.requires_grad]
+        logger.info(f"Trainable parameter names (first 10): {trainable_names[:10]}")
     
     model.to(device)
     return model, src_vocab, tgt_vocab
@@ -240,12 +301,18 @@ def create_data_loaders(config, src_vocab, tgt_vocab):
     
     logger.info(f"Data split: {split_idx:,} train, {len(train_src_lines)-split_idx:,} val")
     
+    # Check if using BPE tokenization
+    vocab_config = config.get('vocab', {})
+    use_bpe = vocab_config.get('tokenization') == 'bpe'
+    
     # Create datasets
     train_dataset = TranslationDataset(
         src_file='data/temp/train_src.txt',
         tgt_file='data/temp/train_tgt.txt',
         src_vocab=src_vocab,
         tgt_vocab=tgt_vocab,
+        src_tokenizer=src_vocab if use_bpe else None,
+        tgt_tokenizer=tgt_vocab if use_bpe else None,
         max_length=data_config.get('max_seq_length', 256)
     )
     
@@ -254,6 +321,8 @@ def create_data_loaders(config, src_vocab, tgt_vocab):
         tgt_file='data/temp/val_tgt.txt',
         src_vocab=src_vocab,
         tgt_vocab=tgt_vocab,
+        src_tokenizer=src_vocab if use_bpe else None,
+        tgt_tokenizer=tgt_vocab if use_bpe else None,
         max_length=data_config.get('max_seq_length', 256)
     )
     
@@ -265,6 +334,8 @@ def create_data_loaders(config, src_vocab, tgt_vocab):
             tgt_file=data_config['test_tgt'],
             src_vocab=src_vocab,
             tgt_vocab=tgt_vocab,
+            src_tokenizer=src_vocab if use_bpe else None,
+            tgt_tokenizer=tgt_vocab if use_bpe else None,
             max_length=data_config.get('max_seq_length', 256)
         )
         logger.info(f"Test set: {len(test_dataset):,} samples")
@@ -352,7 +423,8 @@ def main():
     total_steps = len(train_loader) * train_config.get('epochs', 25)
     warmup_steps = train_config.get('warmup_steps', 1000)
     
-    if train_config.get('scheduler', 'cosine_warmup') == 'cosine_warmup':
+    scheduler_type = train_config.get('scheduler', 'cosine_warmup')
+    if scheduler_type in ['cosine', 'cosine_warmup']:
         scheduler = CosineWarmupScheduler(
             optimizer,
             warmup_steps=warmup_steps,
@@ -362,6 +434,7 @@ def main():
         logger.info(f"✓ Cosine warmup scheduler (warmup={warmup_steps}, total={total_steps})")
     else:
         scheduler = None
+        logger.warning(f"No scheduler configured (scheduler={scheduler_type})")
     
     # Setup SWA (Stochastic Weight Averaging)
     swa_model = None
@@ -426,16 +499,19 @@ def main():
                 output.contiguous().view(-1, output.size(-1)), 
                 tgt_output.contiguous().view(-1)
             )
-            loss = loss / train_config['gradient_accumulation_steps']
+            grad_accum_steps = train_config.get('gradient_accumulation_steps', 1)
+            loss = loss / grad_accum_steps
             
             # Backward pass
             loss.backward()
             
             # Gradient accumulation
-            if (batch_idx + 1) % train_config['gradient_accumulation_steps'] == 0:
+            grad_accum_steps = train_config.get('gradient_accumulation_steps', 1)
+            if (batch_idx + 1) % grad_accum_steps == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), train_config['max_grad_norm'])
                 optimizer.step()
-                scheduler.step()
+                if scheduler is not None:
+                    scheduler.step()
                 optimizer.zero_grad()
                 global_step += 1
                 
@@ -443,11 +519,11 @@ def main():
                 if swa_model is not None and epoch >= train_config.get('swa_start_epoch', 20):
                     swa_model.update_parameters(model)
             
-            epoch_loss += loss.item() * train_config['gradient_accumulation_steps']
+            epoch_loss += loss.item() * grad_accum_steps
             
             # Logging
             if global_step % train_config.get('log_every', 50) == 0:
-                current_lr = scheduler.get_last_lr()[0]
+                current_lr = scheduler.get_last_lr()[0] if scheduler is not None else optimizer.param_groups[0]['lr']
                 progress_bar.set_postfix({
                     'loss': f"{loss.item():.4f}",
                     'lr': f"{current_lr:.2e}"
@@ -456,15 +532,15 @@ def main():
                 if train_config.get('use_wandb', False):
                     try:
                         wandb.log({
-                            'train/loss': loss.item() * train_config['gradient_accumulation_steps'],
+                            'train/loss': loss.item() * grad_accum_steps,
                             'train/lr': current_lr,
                             'train/step': global_step
                         })
                     except:
                         pass
             
-            # Validation
-            if global_step % train_config.get('eval_every', 250) == 0:
+            # Validation (skip at step 0, evaluate after training starts)
+            if global_step > 0 and global_step % train_config.get('eval_every', 250) == 0:
                 model.eval()
                 val_loss = 0
                 with torch.no_grad():

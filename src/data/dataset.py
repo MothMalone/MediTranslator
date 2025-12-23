@@ -68,7 +68,11 @@ class TranslationDataset(Dataset):
                 tgt_line = tgt_line.strip()
 
                 # --- SOURCE encoding ---
-                if self.src_tokenizer is not None:
+                # Check if vocab is SentencePieceVocab (encodes strings directly)
+                from src.data.sp_vocab import SentencePieceVocab
+                if isinstance(self.src_vocab, SentencePieceVocab):
+                    src_indices = self.src_vocab.encode(src_line)
+                elif self.src_tokenizer is not None:
                     # tokenizer.encode may return ids (ints) or tokens (strs)
                     src_enc = self.src_tokenizer.encode(src_line)
                     if len(src_enc) > 0 and isinstance(src_enc[0], int):
@@ -80,7 +84,9 @@ class TranslationDataset(Dataset):
                     src_indices = self.src_vocab.encode(src_tokens)
 
                 # --- TARGET encoding ---
-                if self.tgt_tokenizer is not None:
+                if isinstance(self.tgt_vocab, SentencePieceVocab):
+                    tgt_indices = self.tgt_vocab.encode(tgt_line)
+                elif self.tgt_tokenizer is not None:
                     tgt_enc = self.tgt_tokenizer.encode(tgt_line)
                     if len(tgt_enc) > 0 and isinstance(tgt_enc[0], int):
                         tgt_indices = list(tgt_enc)

@@ -39,6 +39,9 @@ def get_device(device: Optional[str] = None) -> torch.device:
     """
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    elif device == 'cuda' and not torch.cuda.is_available():
+        print("WARNING: CUDA requested but not available. Falling back to CPU.")
+        device = 'cpu'
     return torch.device(device)
 
 

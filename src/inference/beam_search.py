@@ -61,7 +61,7 @@ class BeamSearchDecoder:
     @torch.no_grad()
     def decode(self, src: torch.Tensor) -> List[List[int]]:
         """
-        Perform beam search decoding.
+        Perform beam search decoding (sequential, one batch item at a time).
         
         Args:
             src: Source sequence (batch, src_len)
@@ -70,16 +70,13 @@ class BeamSearchDecoder:
             List of best decoded sequences for each batch item
         """
         self.model.eval()
-        device = src.device
         batch_size = src.size(0)
         
-        # For simplicity, process one sequence at a time
+        # Process each batch item sequentially
         results = []
-        
-        for b in range(batch_size):
-            src_single = src[b:b+1]  # (1, src_len)
-            best_sequence = self._beam_search_single(src_single)
-            results.append(best_sequence)
+        for i in range(batch_size):
+            result = self._beam_search_single(src[i:i+1])
+            results.append(result)
         
         return results
     
@@ -88,86 +85,98 @@ class BeamSearchDecoder:
         Beam search for a single source sequence.
         
         Args:
-            src: Source sequence (1, src_len)
+            src: Single source sequence (1, src_len)
             
         Returns:
-            Best decoded sequence as list of token indices
+            Best decoded sequence (list of token IDs)
         """
         device = src.device
         
         # Encode source
-        memory = self.model.encode(src)
+        memory = self.model.encode(src)  # (1, src_len, d_model)
         
-        # Expand memory for beam search
+        # Expand memory for beam_size
         # (1, src_len, d_model) -> (beam_size, src_len, d_model)
-        memory = memory.expand(self.beam_size, -1, -1)
+        memory = memory.repeat(self.beam_size, 1, 1)
         
-        # Initialize beams
-        # Each beam: (tokens, cumulative_log_prob)
-        beams = [([self.bos_idx], 0.0)]
+        # Initialize beams with BOS token
+        # Each beam: [BOS]
+        beams = [[self.bos_idx] for _ in range(self.beam_size)]
+        beam_scores = [0.0] + [-1e9] * (self.beam_size - 1)  # Only first beam is active
         finished_beams = []
         
         for step in range(self.max_length):
-            if len(beams) == 0:
-                break
-            
-            all_candidates = []
-            
-            for beam_idx, (tokens, score) in enumerate(beams):
-                # Create decoder input
-                decoder_input = torch.tensor(
-                    [tokens],
-                    dtype=torch.long,
-                    device=device
-                )
-                
-                # Decode
-                logits = self.model.decode(
-                    decoder_input,
-                    memory[beam_idx:beam_idx+1]
-                )
-                
-                # Get log probabilities for last position
-                log_probs = F.log_softmax(logits[0, -1, :], dim=-1)
-                
-                # Get top-k candidates
-                topk_log_probs, topk_indices = log_probs.topk(self.beam_size)
-                
-                for k in range(self.beam_size):
-                    token = topk_indices[k].item()
-                    token_score = topk_log_probs[k].item()
-                    new_score = score + token_score
-                    new_tokens = tokens + [token]
-                    
-                    if token == self.eos_idx:
-                        # Beam finished
-                        normalized_score = self._length_normalize(
-                            new_score, len(new_tokens)
-                        )
-                        finished_beams.append((new_tokens, normalized_score))
+            # Prepare decoder input for all beams
+            # (beam_size, current_length)
+            decoder_input = torch.tensor(beams, dtype=torch.long, device=device)
+
+            # Decode: (beam_size, current_length, vocab_size)
+            logits = self.model.decode(decoder_input, memory)
+
+            # Get log probs for next token: (beam_size, vocab_size)
+            log_probs = F.log_softmax(logits[:, -1, :], dim=-1)
+
+            # Collect all candidates
+            candidates = []
+
+            for beam_idx in range(len(beams)):
+                if beam_scores[beam_idx] == -1e9:  # Inactive beam
+                    continue
+
+                # Get top-k tokens for this beam
+                top_log_probs, top_indices = log_probs[beam_idx].topk(self.beam_size)
+
+                for log_prob, token_id in zip(top_log_probs.tolist(), top_indices.tolist()):
+                    # New sequence
+                    new_seq = beams[beam_idx] + [token_id]
+                    # New score
+                    new_score = beam_scores[beam_idx] + log_prob
+
+                    # If EOS, add to finished beams
+                    if token_id == self.eos_idx:
+                        # Apply length penalty
+                        seq_length = len(new_seq) - 1  # Exclude BOS
+                        normalized_score = self._length_normalize(new_score, seq_length)
+                        finished_beams.append((new_seq, normalized_score))
                     else:
-                        all_candidates.append((new_tokens, new_score))
+                        candidates.append((new_seq, new_score))
             
-            # Select top beams
-            all_candidates.sort(key=lambda x: x[1], reverse=True)
-            beams = all_candidates[:self.beam_size]
+            # If no candidates left, break
+            if not candidates and not beams:
+                break
             
-            # Early stopping
-            if self.early_stopping and len(finished_beams) >= self.beam_size:
+            # Select top beam_size candidates
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            candidates = candidates[:self.beam_size]
+            
+            # Update beams
+            if candidates:
+                beams = [seq for seq, _ in candidates]
+                beam_scores = [score for _, score in candidates]
+            else:
+                # No more active beams
+                break
+            
+            # Early stopping if we have enough finished beams
+            if len(finished_beams) >= self.beam_size and self.early_stopping:
                 break
         
-        # Add unfinished beams to finished
-        for tokens, score in beams:
-            normalized_score = self._length_normalize(score, len(tokens))
-            finished_beams.append((tokens, normalized_score))
+        # Add remaining beams to finished beams (with length penalty)
+        for beam, score in zip(beams, beam_scores):
+            if score != -1e9:
+                seq_length = len(beam) - 1  # Exclude BOS
+                normalized_score = self._length_normalize(score, seq_length)
+                finished_beams.append((beam, normalized_score))
         
-        # Sort by score and return best
-        finished_beams.sort(key=lambda x: x[1], reverse=True)
-        
+        # Select best beam
         if finished_beams:
-            return finished_beams[0][0]
+            finished_beams.sort(key=lambda x: x[1], reverse=True)
+            best_seq = finished_beams[0][0]
         else:
-            return [self.bos_idx, self.eos_idx]
+            # Fallback: use first beam
+            best_seq = beams[0] if beams else [self.bos_idx, self.eos_idx]
+        
+        return best_seq
 
 
 @torch.no_grad()

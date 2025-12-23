@@ -124,6 +124,22 @@ class Translator:
             return translations[0]
         return translations
     
+    def translate_batch(self, texts: List[str]) -> List[str]:
+        """
+        Translate a batch of texts efficiently.
+        
+        Args:
+            texts: List of input texts
+            
+        Returns:
+            List of translated texts
+        """
+        if not texts:
+            return []
+        
+        # Use the existing translate method which already handles batches
+        return self.translate(texts)
+    
     def _tokenize(self, texts: List[str]) -> List[List[str]]:
         """Tokenize input texts (only used for word-level)."""
         if self.use_bpe:

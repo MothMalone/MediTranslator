@@ -324,18 +324,6 @@ def get_lora_parameters(model: nn.Module):
     return lora_params
 
 
-def merge_lora_weights(model: nn.Module):
-    """
-    Merge all LoRA weights into base layers.
-    
-    Args:
-        model: Model with LoRA layers
-    """
-    for module in model.modules():
-        if isinstance(module, LinearWithLoRA):
-            module.merge_weights()
-
-
 def unmerge_lora_weights(model: nn.Module):
     """
     Unmerge all LoRA weights from base layers.

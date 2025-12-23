@@ -16,6 +16,7 @@ from src.utils.helpers import get_device
 from src.data.vocabulary import Vocabulary
 from src.data.sp_vocab import SentencePieceVocab
 from src.models.transformer import Transformer
+from src.models.lora import apply_lora_to_model, merge_lora_weights
 from src.inference.translator import Translator
 
 
@@ -132,8 +133,38 @@ def load_translator(checkpoint_path: str, config: dict, args):
     # Determine tokenization type
     tokenization = config.get('vocab', {}).get('tokenization', 'word')
     
-    # Load vocabularies - check for expanded_vocab_dir first (vocab expansion models), then vocab_dir
-    vocab_dir = config['paths'].get('expanded_vocab_dir') or config['paths']['vocab_dir']
+    # Determine which vocab to use
+    paths_config = config['paths']
+    expanded_dir = paths_config.get('expanded_vocab_dir')
+    base_dir = paths_config['vocab_dir']
+    
+    # Try expanded vocab first if configured
+    vocab_dir = base_dir  # Default to base
+    
+    if expanded_dir:
+        if tokenization == 'bpe':
+            # Check if expanded BPE models exist
+            src_model = os.path.join(expanded_dir, 'src.model')
+            tgt_model = os.path.join(expanded_dir, 'tgt.model')
+            if os.path.exists(src_model) and os.path.exists(tgt_model):
+                print(f"✓ Using expanded vocabulary: {expanded_dir}")
+                vocab_dir = expanded_dir
+            else:
+                print(f"⚠ Expanded vocab not found, using base vocab: {base_dir}")
+                vocab_dir = base_dir
+        else:
+            # Check if expanded word-level vocabs exist
+            src_vocab = os.path.join(expanded_dir, 'src_vocab.json')
+            tgt_vocab = os.path.join(expanded_dir, 'tgt_vocab.json')
+            if os.path.exists(src_vocab) and os.path.exists(tgt_vocab):
+                print(f"✓ Using expanded vocabulary: {expanded_dir}")
+                vocab_dir = expanded_dir
+            else:
+                print(f"⚠ Expanded vocab not found, using base vocab: {base_dir}")
+                vocab_dir = base_dir
+    else:
+        print(f"✓ Using base vocabulary: {base_dir}")
+    
     src_vocab, tgt_vocab = load_vocabs(vocab_dir, tokenization)
     
     # Create model

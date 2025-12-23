@@ -18,6 +18,7 @@ from src.data.vocabulary import Vocabulary
 from src.data.sp_vocab import SentencePieceVocab
 from src.data.dataset import TranslationDataset, create_dataloader
 from src.models.transformer import Transformer
+from src.models.lora import apply_lora_to_model, merge_lora_weights
 from src.inference.translator import Translator
 from src.evaluation.bleu import BLEUCalculator
 
@@ -94,10 +95,39 @@ def load_model(checkpoint_path: str, config: dict, device: torch.device):
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Load vocabularies - check for expanded_vocab_dir first (vocab expansion models), then vocab_dir
-    vocab_dir = config['paths'].get('expanded_vocab_dir') or config['paths']['vocab_dir']
+    # Determine which vocab to use
+    paths_config = config['paths']
+    expanded_dir = paths_config.get('expanded_vocab_dir')
+    base_dir = paths_config['vocab_dir']
     vocab_config = config.get('vocab', {})
     use_bpe = vocab_config.get('tokenization') == 'bpe'
+    
+    # Try expanded vocab first if configured
+    vocab_dir = base_dir  # Default to base
+    
+    if expanded_dir:
+        if use_bpe:
+            # Check if expanded BPE models exist
+            src_model = os.path.join(expanded_dir, 'src.model')
+            tgt_model = os.path.join(expanded_dir, 'tgt.model')
+            if os.path.exists(src_model) and os.path.exists(tgt_model):
+                print(f"✓ Using expanded vocabulary: {expanded_dir}")
+                vocab_dir = expanded_dir
+            else:
+                print(f"⚠ Expanded vocab not found, using base vocab: {base_dir}")
+                vocab_dir = base_dir
+        else:
+            # Check if expanded word-level vocabs exist
+            src_vocab_file = os.path.join(expanded_dir, 'src_vocab.json')
+            tgt_vocab_file = os.path.join(expanded_dir, 'tgt_vocab.json')
+            if os.path.exists(src_vocab_file) and os.path.exists(tgt_vocab_file):
+                print(f"✓ Using expanded vocabulary: {expanded_dir}")
+                vocab_dir = expanded_dir
+            else:
+                print(f"⚠ Expanded vocab not found, using base vocab: {base_dir}")
+                vocab_dir = base_dir
+    else:
+        print(f"✓ Using base vocabulary: {base_dir}")
     
     if use_bpe:
         # BPE: Load SentencePiece models
@@ -129,8 +159,34 @@ def load_model(checkpoint_path: str, config: dict, device: torch.device):
         pad_idx=0
     )
     
-    # Load weights
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Check if checkpoint has LoRA structure
+    state_dict = checkpoint['model_state_dict']
+    has_lora = any('lora' in key for key in state_dict.keys())
+    
+    if has_lora:
+        print("Detected LoRA checkpoint, applying LoRA structure...")
+        # Get LoRA config from checkpoint if available
+        lora_config = config.get('lora', {})
+        model, lora_count = apply_lora_to_model(
+            model,
+            target_modules=lora_config.get('target_modules', ['query', 'value']),
+            rank=lora_config.get('rank', 8),
+            alpha=lora_config.get('alpha', 16),
+            dropout=0.0  # No dropout during evaluation
+        )
+        print(f"Applied LoRA to {lora_count} layers")
+        
+        # Load LoRA weights
+        model.load_state_dict(state_dict)
+        
+        # Merge LoRA weights for efficient inference
+        print("Merging LoRA weights...")
+        model = merge_lora_weights(model)
+        print("LoRA weights merged successfully")
+    else:
+        # Regular checkpoint without LoRA
+        model.load_state_dict(state_dict)
+    
     model.to(device)
     model.eval()
     
